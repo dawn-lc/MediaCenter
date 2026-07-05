@@ -1,0 +1,25 @@
+/* ============================================
+   Design Tokens
+   ============================================ */
+
+:root {
+    --primary: #6c5ce7;
+    --primary-dark: #5a4bd1;
+    --primary-light: #a29bfe;
+    --secondary: #00cec9;
+    --bg-dark: #0a0a1a;
+    --bg-card: #14142b;
+    --bg-card-hover: #1c1c3a;
+    --bg-input: #1a1a35;
+    --text-primary: #e8e8f0;
+    --text-secondary: #9898b8;
+    --text-muted: #6a6a8a;
+    --border: #2a2a4a;
+    --danger: #ff6b6b;
+    --success: #51cf66;
+    --warning: #ffd43b;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    --transition: all 0.3s ease;
+}

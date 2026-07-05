@@ -1,0 +1,46 @@
+# ==================
+# MediaCenter .gitignore
+# ==================
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+
+# === 环境变量 ===
+.env
+.env.local
+.env.*.local
+
+# === 上传的媒体文件 ===
+uploads/
+!uploads/.gitkeep
+
+# === 构建输出 ===
+dist
+
+scripts
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+._*
+
+# === IDE / 编辑器 ===
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# === 日志 ===
+logs/
+*.log
+
+# === OS ===
+Desktop.ini
+ehthumbs.db

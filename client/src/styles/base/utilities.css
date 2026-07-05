@@ -1,0 +1,237 @@
+/* ============================================
+   CSS 工具类 — 减少内联样式重复
+   ============================================ */
+
+/* ── 间距 ── */
+.mt-8 {
+    margin-top: 8px;
+}
+
+.mt-16 {
+    margin-top: 16px;
+}
+
+.mt-20 {
+    margin-top: 20px;
+}
+
+.mb-16 {
+    margin-bottom: 16px;
+}
+
+.mb-24 {
+    margin-bottom: 24px;
+}
+
+/* ── Flex 布局 ── */
+.flex {
+    display: flex;
+}
+
+.flex-1 {
+    flex: 1;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.flex-center {
+    display: flex;
+    align-items: center;
+}
+
+.flex-gap-8 {
+    display: flex;
+    gap: 8px;
+}
+
+.flex-gap-8-center {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.flex-center-gap-8 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── 文本 ── */
+.text-sm {
+    font-size: 14px;
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
+
+/* ── 对齐 ── */
+.text-right {
+    text-align: right;
+}
+
+.flex-end {
+    justify-content: flex-end;
+}
+
+/* ── 间距 ── */
+.mb-8 {
+    margin-bottom: 8px;
+}
+
+/* ── 内边距 ── */
+.p-0 {
+    padding: 0;
+}
+
+/* ── 最小宽度 ── */
+.min-w-200 {
+    min-width: 200px;
+}
+
+/* ── 链接卡片 ── */
+.link-card-inline {
+    font-weight: 600;
+    color: inherit;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+/* ── 文字 ── */
+.text-secondary {
+    color: var(--text-secondary);
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
+
+.text-sm {
+    font-size: 13px;
+}
+
+.text-xs {
+    font-size: 12px;
+}
+
+.text-danger {
+    color: var(--danger);
+}
+
+/* ── 按钮行 ── */
+.btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.btn-row-center {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+/* ── 表单容器 ── */
+.form-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* ── 媒体卡片图片 ── */
+.img-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ── 管理页卡片链接 ── */
+.link-card {
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.link-card:hover {
+    border-color: var(--primary) !important;
+}
+
+/* ── 管理页卡片描述 ── */
+.card-desc {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* ── 区域卡片间距 ── */
+.section-card {
+    margin-bottom: 24px;
+}
+
+/* ── 徽章 ── */
+.badge-danger {
+    background: rgba(255, 107, 107, 0.2);
+    color: var(--danger);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.badge-success {
+    background: rgba(46, 204, 113, 0.15);
+    color: #2ecc71;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+}
+
+.badge-warning {
+    background: rgba(255, 193, 7, 0.15);
+    color: #ffc107;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+/* ── 错误消息 ── */
+.error-msg {
+    color: var(--text-secondary);
+    margin-top: 8px;
+    font-size: 14px;
+}
+
+/* ── 进度信息 ── */
+.progress-info {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+/* ── 可缩放文本框 ── */
+.textarea-v {
+    resize: vertical;
+}
+
+/* ── 非信任图片触发器 ── */
+.untrusted-trigger {
+    cursor: pointer;
+    color: var(--color-link, #069);
+}
+
+/* ── 缩略图占位图标 ── */
+.thumb-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+}
+
+/* ── 宽度 ── */
+.w-full {
+    width: 100%;
+}
+
+/* ── 定位 ── */
+.pos-relative {
+    position: relative;
+}
+
+.float-right {
+    float: right;
+}

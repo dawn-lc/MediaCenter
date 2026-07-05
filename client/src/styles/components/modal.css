@@ -1,0 +1,168 @@
+/* ============================================
+   Modal 遮罩 & 弹窗
+   ============================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.modal-open {
+    opacity: 1;
+}
+
+/* ========== Modal 弹窗主体 ========== */
+.modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0;
+    width: 90%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transform: scale(0.92) translateY(12px);
+    transition: transform 0.2s ease;
+}
+
+.modal.modal-open {
+    transform: scale(1) translateY(0);
+}
+
+/* ========== Modal 头部 ========== */
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 0;
+}
+
+.modal-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+}
+
+/* ========== Modal 关闭按钮 ========== */
+.modal-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* ========== Modal 主体 ========== */
+.modal-body {
+    padding: 16px 24px;
+}
+
+.modal-header+.modal-body {
+    padding-top: 12px;
+}
+
+.modal .form-group:last-child {
+    margin-bottom: 0;
+}
+
+/* ========== Modal 底部 ========== */
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    padding: 0 24px 24px;
+}
+
+.modal-footer .btn {
+    flex: 1;
+    justify-content: center;
+}
+
+/* ========== Modal 链接（登录/注册切换） ========== */
+.modal-link {
+    text-align: center;
+    padding: 0 24px 24px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* ========== 登录弹窗专用 ========== */
+.modal-auth-icon {
+    display: flex;
+    justify-content: center;
+    padding: 8px 24px 0;
+}
+
+.modal-auth-icon .auth-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(108, 92, 231, 0.3);
+}
+
+.modal-auth-toggle {
+    text-align: center;
+    padding: 16px 0 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.auth-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.auth-footer .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 20px;
+    font-size: 15px;
+    border-radius: var(--radius-sm);
+}
+
+.modal-auth-toggle a {
+    color: var(--primary-light);
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.modal-auth-toggle a:hover {
+    color: var(--primary);
+    text-decoration: underline;
+}

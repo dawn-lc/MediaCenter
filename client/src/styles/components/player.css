@@ -1,0 +1,486 @@
+/* ============================================
+    播放器
+   ============================================ */
+
+.player-container {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.player-wrapper {
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+    width: 100%;
+    /* 竖屏视频限制宽度时居中 */
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.player-wrapper video,
+.player-wrapper audio {
+    width: 100%;
+    display: block;
+}
+
+.player-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.player-info {
+    padding: 24px;
+}
+
+.player-info h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* ========== 播放控制栏 ========== */
+.player-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.player-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.player-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.player-controls-position {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+/* ========== 描述（Markdown 渲染） ========== */
+.player-desc {
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    overflow: hidden;
+}
+
+.player-desc.clamped {
+    max-height: calc(1.6em * 5);
+}
+
+.player-desc p {
+    margin: 0 0 6px;
+}
+
+.player-desc p:last-child {
+    margin-bottom: 0;
+}
+
+.player-desc a {
+    color: var(--primary-light);
+}
+
+.player-desc a:hover {
+    color: var(--primary);
+}
+
+/* 外部链接：显示小图标提示 */
+.player-desc a[target="_blank"]::after {
+    content: " ↗";
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+.player-desc code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-input);
+    font-size: 13px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.player-desc strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.player-desc ul,
+.player-desc ol {
+    padding-left: 20px;
+    margin: 6px 0;
+}
+
+/* Markdown 图片自适应容器 */
+.player-desc img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 8px 0;
+}
+
+/* 非信任图片占位符 */
+.untrusted-image.untrusted-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 1px dashed var(--border);
+    user-select: none;
+    transition: background 0.15s;
+    margin: 8px 0;
+}
+
+.untrusted-image.untrusted-trigger:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--text-secondary);
+}
+
+.untrusted-placeholder-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.untrusted-placeholder-text {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.untrusted-placeholder-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.untrusted-image.untrusted-trigger:hover .untrusted-placeholder-hint {
+    color: var(--text-primary);
+}
+
+.untrusted-image img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 4px 0;
+}
+
+.desc-expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin: 4px auto 0;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.desc-expand-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+/* ========== 元信息行 ========== */
+.player-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.meta-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    user-select: none;
+}
+
+.meta-value {
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+}
+
+.meta-item a {
+    color: var(--primary-light);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+}
+
+.meta-item a:hover {
+    color: var(--primary);
+}
+
+.meta-link {
+    color: var(--primary-light);
+    font-weight: 500;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+    transition: color 0.15s;
+}
+
+.meta-link:hover {
+    color: var(--primary);
+}
+
+.badge-deleted {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    height: 22px;
+    border-radius: 4px;
+    background: rgba(255, 71, 87, 0.15);
+    color: #ff4757;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    align-self: center;
+}
+
+/* ========== 播放列表侧边栏 ========== */
+.player-sidebar {
+    position: relative;
+    width: 320px;
+    margin-left: 20px;
+    min-width: 0;
+}
+
+.sidebar-card {
+    position: absolute;
+    inset: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-left: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.sidebar-title .float-right {
+    float: none;
+}
+
+.sidebar-count {
+    font-weight: 400;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* 侧边栏内容行（列表 + 滚动条） */
+.sidebar-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 4px;
+}
+
+/* 虚拟滚动外层容器 */
+.sidebar-list-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.sidebar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 自定义滚动条轨道 */
+.sidebar-scroll-track {
+    flex-shrink: 0;
+    position: relative;
+    background: var(--bg-input);
+    border-radius: 4px;
+    cursor: pointer;
+    touch-action: none;
+}
+
+/* 自定义滚动条滑块 */
+.sidebar-scroll-thumb {
+    position: absolute;
+    left: 0;
+    right: 0;
+    min-height: 20px;
+    background: var(--text-muted);
+    border-radius: 4px;
+    transition: background 0.15s;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.sidebar-scroll-thumb:hover {
+    background: var(--text-secondary);
+}
+
+.sidebar-scroll-thumb:active {
+    cursor: grabbing;
+    background: var(--primary-light);
+}
+
+.playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 13px;
+    user-select: none;
+}
+
+.playlist-item:hover {
+    background: var(--bg-input);
+}
+
+.playlist-item.active {
+    background: rgba(108, 92, 231, 0.2);
+    color: var(--primary-light);
+    font-weight: 600;
+}
+
+.playlist-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.playlist-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.playlist-duration {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* ========== 音频页 ========== */
+.audio-card {
+    background: linear-gradient(135deg, #1a1a3a, #0a0a1a);
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.audio-player {
+    width: 100%;
+    max-width: 500px;
+}
+
+/* ========== 图片页 ========== */
+.image-wrapper {
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.image-display {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+/* ========== 播放器布局 ========== */
+.player-page {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.player-below {
+    display: grid;
+    grid-template-columns: 1fr auto;
+}
+
+.player-wrapper .video-js {
+    width: 100%;
+    /* 让 fluid 模式根据视频原始宽高比自动计算高度 */
+}
+
+.player-wrapper .video-js .vjs-tech {
+    object-fit: contain;
+    width: 100%;
+    height: 100%;
+}
+
+/* 修复 Firefox 下进度条滑块的盒模型偏移 */
+.player-wrapper .video-js *,
+.player-wrapper .video-js *::before,
+.player-wrapper .video-js *::after {
+    box-sizing: content-box;
+}

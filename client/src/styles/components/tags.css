@@ -1,0 +1,217 @@
+/* ============================================
+   标签 & 徽章
+   ============================================ */
+
+.player-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    cursor: default;
+    transition: var(--transition);
+}
+
+.tag-badge.tag-clickable {
+    cursor: pointer;
+}
+
+.tag-badge.tag-clickable:hover {
+    border-color: var(--primary);
+    color: var(--primary-light);
+    background: rgba(108, 92, 231, 0.1);
+}
+
+/* ========== 标签选择器 ========== */
+.tag-selector-wrapper {
+    position: relative;
+}
+
+/* 在筛选行中自动撑满 */
+.tag-expr-row .tag-selector-wrapper {
+    flex: 1;
+    min-width: 150px;
+}
+
+.tag-expr-row .tag-selector-wrapper .form-input {
+    width: 100%;
+}
+
+.tag-selector-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.tag-selector-input {
+    min-width: 140px;
+}
+
+.tag-selector-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 300;
+    box-shadow: var(--shadow);
+}
+
+.tag-dropdown-item {
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+
+.tag-dropdown-item:hover {
+    background: var(--bg-input);
+    color: var(--primary-light);
+}
+
+.tag-dropdown-active {
+    background: var(--primary);
+    color: #fff !important;
+}
+
+.tag-dropdown-alt {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 6px;
+}
+
+.tag-dropdown-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-input);
+    padding: 1px 8px;
+    border-radius: 10px;
+}
+
+.tag-dropdown-empty {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.tag-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+}
+
+.tag-remove:hover {
+    color: var(--danger);
+}
+
+/* ========== 标签分组高亮颜色 ========== */
+.tag-group-0 {
+    background: rgba(108, 92, 231, 0.45) !important;
+    border-color: rgba(108, 92, 231, 0.7) !important;
+    color: #d5d0ff !important;
+}
+
+.tag-group-1 {
+    background: rgba(0, 206, 201, 0.4) !important;
+    border-color: rgba(0, 206, 201, 0.6) !important;
+    color: #a0f0ed !important;
+}
+
+.tag-group-2 {
+    background: rgba(253, 121, 168, 0.4) !important;
+    border-color: rgba(253, 121, 168, 0.6) !important;
+    color: #ffc8dc !important;
+}
+
+.tag-group-3 {
+    background: rgba(253, 203, 110, 0.4) !important;
+    border-color: rgba(253, 203, 110, 0.6) !important;
+    color: #fff0cc !important;
+}
+
+.tag-group-4 {
+    background: rgba(85, 239, 196, 0.4) !important;
+    border-color: rgba(85, 239, 196, 0.6) !important;
+    color: #b8fae4 !important;
+}
+
+.tag-group-5 {
+    background: rgba(116, 185, 255, 0.4) !important;
+    border-color: rgba(116, 185, 255, 0.6) !important;
+    color: #cce5ff !important;
+}
+
+.tag-group-6 {
+    background: rgba(162, 155, 254, 0.4) !important;
+    border-color: rgba(162, 155, 254, 0.6) !important;
+    color: #e2dfff !important;
+}
+
+/* ========== 徽章 ========== */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-admin {
+    background: rgba(108, 92, 231, 0.2);
+    color: var(--primary-light);
+}
+
+.badge-user {
+    background: rgba(0, 206, 201, 0.2);
+    color: var(--secondary);
+}
+
+.badge-guest {
+    background: rgba(106, 106, 138, 0.2);
+    color: var(--text-muted);
+}
+
+.badge-video {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+}
+
+.badge-audio {
+    background: rgba(81, 207, 102, 0.2);
+    color: #51cf66;
+}
+
+.badge-image {
+    background: rgba(255, 212, 59, 0.2);
+    color: #ffd43b;
+}
