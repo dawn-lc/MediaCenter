@@ -2,6 +2,15 @@
 
 基于 **Node.js + Express + React + Drizzle ORM + PostgreSQL** 的全栈流媒体中心，支持视频/音频流式传输、图片预览、媒体资源管理、标签系统、作者管理、用户认证和角色权限控制。
 
+## 许可证
+
+本软件采用 **PolyForm Noncommercial License 1.0.0** 发布。
+
+- **非商业使用**（个人学习、研究、娱乐、教育机构等）—— 完全免费
+- **商业使用**（SaaS 服务、企业内部系统、付费分发等）—— 需获得商业授权
+
+详见 [LICENSE](./LICENSE) 和 [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md)。
+
 ## 技术栈
 
 ### 后端
@@ -32,6 +41,20 @@
 | **Video.js**                | 视频播放器    |
 | **Vite 8**                  | 构建工具      |
 | **TypeScript**              | 开发语言      |
+
+## 特性
+
+- **多类型媒体支持** — 视频、音频、图片，浏览器原生播放
+- **标签系统** — AND/OR/括号分组表达式筛选，自动高亮
+- **作者系统** — 别名、外部链接，按媒体数量排序
+- **角色权限** — 四级权限（guest/user/admin），SQL 层过滤
+- **元数据分级展示** — 不同角色看到的信息不同
+- **管理员面板** — 标签/作者/用户管理，支持搜索 + 分页 + 行内编辑
+- **国际化** — 简体中文 / English 双语支持
+- **流媒体签名** — HMAC-SHA256 签名 URL，定时自动刷新
+- **文件去重** — SHA-256 哈希检测，避免重复上传
+- **三级限流** — API / 管理 / 流媒体分别限流，管理员豁免
+- **响应式设计** — 适配桌面端和移动端
 
 ## 快速开始
 
@@ -80,91 +103,118 @@ npm run start
 
 访问 **http://localhost:3000** 即可使用。
 
+## 开发
+
+```bash
+# 一键开发（后端热重载 + 前端 HMR）
+npm run dev
+
+# 单独开发
+npm run server:dev     # 后端（tsx watch）
+npm run client:dev     # 前端（Vite HMR）
+```
+
 ## 项目结构
 
 ```
-├── client/                            # 前端 (React + Vite + TS)
+├── client/                              # 前端 (React + Vite + TS)
 │   ├── src/
-│   │   ├── components/                # 通用组件
-│   │   │   ├── Modal.tsx              #   模态框
-│   │   │   ├── Navbar.tsx             #   导航栏
-│   │   │   ├── TagSelector.tsx        #   标签选择器
-│   │   │   └── AuthorSelector.tsx     #   作者选择器
-│   │   ├── pages/                     # 页面
-│   │   │   ├── HomePage.tsx           #   首页（媒体列表）
-│   │   │   ├── PlayerPage.tsx         #   播放页
-│   │   │   ├── UploadPage.tsx         #   上传页
-│   │   │   └── AdminPage.tsx          #   管理后台
-│   │   ├── players/                   # 播放器模块
-│   │   │   ├── VideoPlayer.tsx        #   视频播放器（Video.js）
-│   │   │   ├── AudioPlayer.tsx        #   音频播放器
-│   │   │   ├── ImageViewer.tsx        #   图片查看器
-│   │   │   ├── PlayerControls.tsx     #   播放控制栏
-│   │   │   ├── PlayerInfo.tsx         #   播放器信息
-│   │   │   ├── PlayerMeta.tsx         #   元数据展示
-│   │   │   ├── MediaActions.tsx       #   媒体操作按钮
-│   │   │   └── PlaylistSidebar.tsx    #   播放列表侧栏
-│   │   ├── stores/                    # Zustand 状态管理
-│   │   │   ├── auth.ts               #   认证状态
-│   │   │   └── playlist.ts            #   播放列表状态
-│   │   ├── hooks/                     # 自定义 Hooks
-│   │   │   └── useStreamToken.ts      #   流媒体令牌自动刷新
-│   │   ├── styles/                    # 结构化 CSS（按组件拆分）
-│   │   │   ├── base/                  #   variables.css + reset.css
-│   │   │   ├── components/            #   各组件样式
-│   │   │   ├── responsive.css         #   响应式适配
-│   │   │   └── index.css              #   @import 入口
-│   │   ├── locales/                   # i18n 翻译
-│   │   │   ├── zh-CN.json             #   中文
-│   │   │   └── en-US.json             #   英文
-│   │   ├── utils/                     # 工具函数
-│   │   │   └── utils.ts               #   格式化、类型判断等
-│   │   ├── api.ts                     # API 客户端
-│   │   ├── types.ts                   # 共享类型定义
-│   │   ├── App.tsx                    # 根组件 + 路由
-│   │   └── main.tsx                   # 入口
+│   │   ├── components/                  # 通用组件
+│   │   │   ├── Modal.tsx                #   模态框
+│   │   │   ├── ConfirmDialog.tsx        #   确认对话框
+│   │   │   ├── Navbar.tsx               #   导航栏（含登录弹窗）
+│   │   │   ├── TagSelector.tsx          #   标签选择器
+│   │   │   ├── AuthorSelector.tsx       #   作者选择器
+│   │   │   ├── TagList.tsx              #   标签列表展示
+│   │   │   ├── Pagination.tsx           #   分页组件
+│   │   │   ├── LoadingState.tsx         #   加载状态
+│   │   │   ├── EmptyState.tsx           #   空状态
+│   │   │   └── AdminGuard.tsx           #   管理员路由守卫
+│   │   ├── pages/                       # 页面
+│   │   │   ├── HomePage.tsx             #   首页（媒体列表 + 筛选）
+│   │   │   ├── PlayerPage.tsx           #   播放页
+│   │   │   ├── UploadPage.tsx           #   上传页
+│   │   │   ├── EditMediaPage.tsx        #   编辑媒体
+│   │   │   ├── AdminPage.tsx            #   管理后台
+│   │   │   ├── TagsPage.tsx             #   标签管理（行内编辑）
+│   │   │   ├── AuthorsPage.tsx          #   作者管理（行内编辑）
+│   │   │   └── UsersPage.tsx            #   用户管理
+│   │   ├── players/                     # 播放器模块
+│   │   │   ├── VideoPlayer.tsx          #   视频播放器（Video.js）
+│   │   │   ├── AudioPlayer.tsx          #   音频播放器
+│   │   │   ├── ImageViewer.tsx          #   图片查看器
+│   │   │   ├── PlayerControls.tsx       #   播放控制栏
+│   │   │   ├── PlayerInfo.tsx           #   播放器信息
+│   │   │   ├── PlayerMeta.tsx           #   元数据展示（权限分级）
+│   │   │   ├── MediaActions.tsx         #   媒体操作按钮（含恢复）
+│   │   │   ├── PlayerLayout.tsx         #   播放器布局
+│   │   │   └── PlaylistSidebar.tsx      #   播放列表侧栏
+│   │   ├── stores/                      # Zustand 状态管理
+│   │   │   ├── auth.ts                  #   认证状态
+│   │   │   ├── playlist.ts              #   播放列表状态
+│   │   │   └── playerSettings.ts        #   播放器设置
+│   │   ├── hooks/                       # 自定义 Hooks
+│   │   │   ├── useStreamToken.ts        #   流媒体令牌自动刷新
+│   │   │   └── useClickOutside.ts       #   点击外部检测
+│   │   ├── styles/                      # 结构化 CSS
+│   │   │   ├── base/                    #   variables.css + reset.css
+│   │   │   ├── components/              #   各组件样式
+│   │   │   ├── responsive.css           #   响应式适配
+│   │   │   └── index.css                #   @import 入口
+│   │   ├── locales/                     # i18n 翻译
+│   │   │   ├── zh-CN.json               #   简体中文
+│   │   │   └── en-US.json               #   English
+│   │   ├── config.ts                    # 全局配置常量
+│   │   ├── i18n.ts                      # i18n 初始化
+│   │   ├── utils.ts                     # 格式化、类型判断等工具
+│   │   ├── api.ts                       # API 客户端
+│   │   ├── types.ts                     # 共享类型定义
+│   │   ├── App.tsx                      # 根组件 + 路由
+│   │   └── main.tsx                     # 入口
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── tsconfig.json
 │   └── package.json
-├── src/                               # 后端 (Express + Drizzle + TS)
-│   ├── controllers/                   # 控制器
-│   │   ├── authController.ts          #   认证
-│   │   ├── mediaController.ts         #   媒体 CRUD
-│   │   ├── streamController.ts        #   流式播放
-│   │   ├── adminController.ts         #   管理后台
-│   │   ├── tagsController.ts          #   标签管理
-│   │   ├── authorsController.ts       #   作者管理
-│   │   └── scanController.ts          #   目录扫描
-│   ├── middleware/                    # 中间件
-│   │   ├── auth.ts                    #   JWT 验证 + 角色授权
-│   │   ├── upload.ts                  #   文件上传（Multer）
-│   │   └── rateLimit.ts               #   速率限制（三级限流）
-│   ├── routes/                        # 路由
-│   │   ├── auth.ts                    #   认证路由
-│   │   ├── media.ts                   #   媒体路由
-│   │   ├── stream.ts                  #   流媒体路由
-│   │   ├── admin.ts                   #   管理路由
-│   │   ├── tags.ts                    #   标签路由
-│   │   └── authors.ts                 #   作者路由
-│   ├── utils/                         # 工具函数
-│   │   ├── hash.ts                    #   密码哈希 + 文件哈希
-│   │   ├── roles.ts                   #   角色权限工具
-│   │   ├── signUrl.ts                 #   HMAC-SHA256 签名 URL
-│   │   ├── storage.ts                 #   文件存储操作
-│   │   ├── scanner.ts                 #   目录扫描导入
-│   │   └── tagParser.ts              #   标签表达式解析（AND/OR/括号分组）
-│   ├── db/                            # 数据库
-│   │   ├── index.ts                   #   连接池 + 自动迁移
-│   │   └── schema.ts                  #   表结构定义（7 张表）
-│   ├── config.ts                      # 配置校验
-│   └── index.ts                       # 入口
-├── drizzle.config.ts                  # Drizzle Kit 配置文件
-├── Dockerfile                         # Docker 多阶段构建
-├── dist/                              # 构建产物
-│   ├── index.js                       # 后端单文件
-│   └── public/                        # 前端构建产物
-├── uploads/                           # 用户上传文件
+├── src/                                 # 后端 (Express + Drizzle + TS)
+│   ├── controllers/                     # 控制器
+│   │   ├── authController.ts            #   认证
+│   │   ├── mediaController.ts           #   媒体 CRUD + 恢复
+│   │   ├── streamController.ts          #   流式播放
+│   │   ├── adminController.ts           #   管理后台
+│   │   ├── tagsController.ts            #   标签管理
+│   │   ├── authorsController.ts         #   作者管理
+│   │   └── scanController.ts            #   目录扫描
+│   ├── middleware/                      # 中间件
+│   │   ├── auth.ts                      #   JWT 验证 + 角色授权
+│   │   ├── upload.ts                    #   文件上传（Multer）
+│   │   └── rateLimit.ts                 #   速率限制（三级限流）
+│   ├── routes/                          # 路由
+│   │   ├── auth.ts                      #   认证路由
+│   │   ├── media.ts                     #   媒体路由
+│   │   ├── stream.ts                    #   流媒体路由
+│   │   ├── admin.ts                     #   管理路由
+│   │   ├── tags.ts                      #   标签路由
+│   │   └── authors.ts                   #   作者路由
+│   ├── utils/                           # 工具函数
+│   │   ├── hash.ts                      #   密码哈希 + 文件哈希
+│   │   ├── roles.ts                     #   角色权限工具
+│   │   ├── signUrl.ts                   #   HMAC-SHA256 签名 URL
+│   │   ├── storage.ts                   #   文件存储操作
+│   │   ├── scanner.ts                   #   目录扫描导入
+│   │   ├── tagParser.ts                 #   标签表达式解析
+│   │   └── env.ts                       #   类型守卫 + prune
+│   ├── db/                              # 数据库
+│   │   ├── index.ts                     #   连接池 + 自动迁移
+│   │   └── schema.ts                    #   表结构定义（7 张表）
+│   ├── config.ts                        # 配置校验
+│   └── index.ts                         # 入口
+├── drizzle.config.ts                    # Drizzle Kit 配置文件
+├── Dockerfile                           # Docker 多阶段构建
+├── scripts/                             # CLI 工具脚本
+│   ├── query-media.ts                   #   查询媒体
+│   ├── set-tag-altnames.ts              #   设置标签别名
+│   └── update-paths.ts                  #   批量更新路径
+├── uploads/                             # 用户上传文件
 ├── tsconfig.json
 └── package.json
 ```
@@ -182,14 +232,15 @@ npm run start
 
 ### 媒体管理
 
-| 方法   | 路径                          | 说明                                                                    | 权限          |
-| ------ | ----------------------------- | ----------------------------------------------------------------------- | ------------- |
-| GET    | `/api/media`                  | 媒体列表（支持 `?page=&limit=&type=&search=&tags=&sortBy=&sortOrder=`） | 访客          |
-| GET    | `/api/media/:id`              | 媒体详情                                                                | 访客          |
-| GET    | `/api/media/:id/stream-token` | 刷新流媒体签名令牌（前端自动定时刷新，访客也可用）                      | 访客          |
-| POST   | `/api/media`                  | 上传媒体（新标签/新作者仅限管理员）                                     | 需登录        |
-| PUT    | `/api/media/:id`              | 更新元数据（标题/描述/标签/作者/来源/权限）                             | 上传者/管理员 |
-| DELETE | `/api/media/:id`              | 删除媒体                                                                | 上传者/管理员 |
+| 方法   | 路径                          | 说明                                                                                            | 权限          |
+| ------ | ----------------------------- | ----------------------------------------------------------------------------------------------- | ------------- |
+| GET    | `/api/media`                  | 媒体列表（支持 `?page=&limit=&type=&search=&tags=&authorExpr=&uploaderId=&sortBy=&sortOrder=`） | 访客          |
+| GET    | `/api/media/:id`              | 媒体详情                                                                                        | 访客          |
+| GET    | `/api/media/:id/stream-token` | 刷新流媒体签名令牌（前端自动定时刷新，访客也可用）                                              | 访客          |
+| POST   | `/api/media`                  | 上传媒体（新标签/新作者仅限管理员）                                                             | 需登录        |
+| PUT    | `/api/media/:id`              | 更新元数据（管理员可修改额外字段：fileName/filePath/fileHash 等）                               | 上传者/管理员 |
+| DELETE | `/api/media/:id`              | 删除媒体（用户软删除，管理员硬删除）                                                            | 上传者/管理员 |
+| PUT    | `/api/media/:id/restore`      | 恢复已软删除的媒体                                                                              | 管理员        |
 
 ### 流媒体
 
@@ -205,7 +256,7 @@ npm run start
 
 | 方法   | 路径                              | 说明             | 权限   |
 | ------ | --------------------------------- | ---------------- | ------ |
-| GET    | `/api/admin/users`                | 用户列表         | 管理员 |
+| GET    | `/api/admin/users`                | 用户列表（分页） | 管理员 |
 | PUT    | `/api/admin/users/:id/role`       | 修改用户角色     | 管理员 |
 | DELETE | `/api/admin/users/:id`            | 删除用户         | 管理员 |
 | POST   | `/api/admin/users/:id/toggle-ban` | 切换用户封禁状态 | 管理员 |
@@ -214,20 +265,21 @@ npm run start
 
 ### 标签
 
-| 方法   | 路径            | 说明     | 权限   |
-| ------ | --------------- | -------- | ------ |
-| GET    | `/api/tags`     | 标签列表 | 访客   |
-| POST   | `/api/tags`     | 创建标签 | 管理员 |
-| DELETE | `/api/tags/:id` | 删除标签 | 管理员 |
+| 方法   | 路径            | 说明                                     | 权限   |
+| ------ | --------------- | ---------------------------------------- | ------ |
+| GET    | `/api/tags`     | 标签列表（支持 `?page=&limit=&search=`） | 访客   |
+| POST   | `/api/tags`     | 创建标签                                 | 管理员 |
+| PUT    | `/api/tags/:id` | 更新标签别名                             | 管理员 |
+| DELETE | `/api/tags/:id` | 删除标签                                 | 管理员 |
 
 ### 作者
 
-| 方法   | 路径               | 说明                     | 权限   |
-| ------ | ------------------ | ------------------------ | ------ |
-| GET    | `/api/authors`     | 作者列表（含媒体数量）   | 需登录 |
-| POST   | `/api/authors`     | 创建作者                 | 管理员 |
-| PUT    | `/api/authors/:id` | 更新作者（别名、链接等） | 管理员 |
-| DELETE | `/api/authors/:id` | 删除作者                 | 管理员 |
+| 方法   | 路径               | 说明                                     | 权限   |
+| ------ | ------------------ | ---------------------------------------- | ------ |
+| GET    | `/api/authors`     | 作者列表（支持 `?page=&limit=&search=`） | 需登录 |
+| POST   | `/api/authors`     | 创建作者                                 | 管理员 |
+| PUT    | `/api/authors/:id` | 更新作者（别名、链接等）                 | 管理员 |
+| DELETE | `/api/authors/:id` | 删除作者                                 | 管理员 |
 
 ## 权限模型
 
@@ -238,6 +290,20 @@ npm run start
 | `admin` | 2    | 全部权限 + 用户管理、角色修改、封禁用户、目录扫描、数据库重置 |
 
 权限在 **SQL 层过滤**，非管理员用户无法越权访问。用户被封禁（`banned`）后无法进行任何操作。
+
+### 媒体元数据分级展示
+
+播放页面上的元数据根据用户角色动态显示：
+
+| 字段                  | 访客 | 登录用户 | 管理员 |
+| --------------------- | :--: | :------: | :----: |
+| 权限/时间/时长/作者   |  ✅  |    ✅    |   ✅   |
+| 上传者/来源链接       |  ❌  |    ✅    |   ✅   |
+| 大小/类型             |  ❌  |    ❌    |   ✅   |
+| 文件名/文件 Hash/路径 |  ❌  |    ❌    |   ✅   |
+| 删除时间              |  ❌  |    ❌    |   ✅   |
+
+作者名和上传者名可点击跳转到首页筛选。
 
 ## 标签系统
 
@@ -252,6 +318,7 @@ npm run start
 - 每个媒体可关联一个作者
 - 作者支持**别名**（`altNames`）和 **外部链接**（`urls`）
 - 作者列表按媒体数量排序，便于发现活跃作者
+- 作者名可点击跳转到首页筛选
 - 仅管理员可创建/编辑/删除作者
 
 ## 脚本命令
@@ -319,15 +386,4 @@ docker run -d \
   -e ADMIN_PASSWORD=your-password \
   -v /path/to/uploads:/app/uploads \
   mediacenter
-```
-
-## 开发
-
-```bash
-# 一键开发（后端热重载 + 前端 HMR）
-npm run dev
-
-# 单独开发
-npm run server:dev     # 后端
-npm run client:dev     # 前端
 ```
