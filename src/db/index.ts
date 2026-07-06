@@ -76,7 +76,7 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
         max: 10
     });
 
-    db = drizzle(pool, { schema });
+    db = drizzle({ client: pool });
 
     try {
         // 启用 pg_trgm 扩展（trigram 索引依赖此扩展）
@@ -97,16 +97,17 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
  */
 export async function syncSchemaInternal(dbInstance: ReturnType<typeof drizzle>): Promise<void> {
     try {
-        const { pushSchema } = await import('drizzle-kit/api');
-        const result = await pushSchema(schema as any, dbInstance as any, ['public'], [], []);
-        for (const warning of result.warnings || []) {
-            console.warn('[DB] ' + warning);
+        const { pushSchema } = await import('drizzle-kit/api-postgres');
+        const result = await pushSchema(
+            schema,
+            dbInstance,
+            { schemas: ['public'], tables: [], entities: undefined, extensions: [] },
+        );
+        for (const hint of result.hints || []) {
+            console.warn('[DB] ' + hint.hint);
         }
-        if (result.statementsToExecute?.length) {
+        if (result.sqlStatements?.length) {
             await result.apply();
-        }
-        if (result.hasDataLoss) {
-            console.warn('[DB] 存在可能数据丢失的变更，请手动确认');
         }
     } catch (err: unknown) {
         console.warn('[DB] 同步失败:', err instanceof Error ? err.message : err);
