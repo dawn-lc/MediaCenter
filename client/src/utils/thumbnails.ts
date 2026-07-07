@@ -24,11 +24,9 @@ const TAIL_SIZE = 1_048_576;  // moov 在尾部时拉取尾部 1MB
  */
 export async function generateVideoThumbnail(
     videoUrl: string,
-    _seekTime = 0.3,
 ): Promise<Blob | null> {
     const log = createLogger('thumb');
-    const shortUrl = videoUrl.length > 80 ? videoUrl.slice(0, 80) + '...' : videoUrl;
-    log(`开始: ${shortUrl}`);
+    log(`开始: ${videoUrl.slice(0, 80)}`);
 
     // ── ① 拉取文件头部 ──
     log(`拉取头部 0-${HEAD_SIZE - 1}`);
@@ -169,7 +167,7 @@ function buildMiniMp4(
     // 修正 moov 中的 stco/co64 偏移
     // 新偏移 = ftyp大小 + 修后的moov大小 + mdat头大小(8)
     const newOffset = ftyp.byteLength + moovBuf.byteLength + 8;
-    const fixedMoov = fixStco(new DataView(moovBuf.slice(0)), originalFrameOffset, newOffset);
+    const fixedMoov = fixStco(new DataView(moovBuf.slice(0)), originalFrameOffset, newOffset, frameBuf.byteLength);
     createLogger('thumb')(`修正偏移: ${originalFrameOffset} → ${newOffset}`);
 
     // mdat 外壳
@@ -182,11 +180,20 @@ function buildMiniMp4(
 }
 
 /** 修正 moov 中 stco/co64 表：
- *  - 匹配 originalOffset 的条目 → newOffset（指向微型 MP4 中的首帧）
- *  - 其余条目 → FAR（越过大文件偏移，解码器越界读取会优雅失败） */
-function fixStco(dv: DataView, originalOffset: number, newOffset: number): ArrayBuffer {
+ *
+ *  数据范围：originalOffset ~ originalOffset + dataSize
+ *  落在范围内的条目 → 映射到微型 MP4 中的对应位置
+ *  范围外的条目     → FAR（解码器越界读取会优雅失败） */
+function fixStco(
+    dv: DataView,
+    originalOffset: number,
+    newOffset: number,
+    dataSize: number,
+): ArrayBuffer {
     const FAR32 = 0xFFFFFFFF;
     const FAR64 = BigInt('0xFFFFFFFFFFFFFFFF');
+    const dataEnd = originalOffset + dataSize;
+
     function walk(start: number, end: number) {
         let pos = start;
         while (pos + 8 <= end) {
@@ -204,10 +211,16 @@ function fixStco(dv: DataView, originalOffset: number, newOffset: number): Array
                     if (entryPos + entrySize > end) break;
                     if (entrySize === 8) {
                         const val = Number(dv.getBigUint64(entryPos));
-                        dv.setBigUint64(entryPos, val === originalOffset ? BigInt(newOffset) : FAR64);
+                        const mapped = (val >= originalOffset && val < dataEnd)
+                            ? BigInt(newOffset + (val - originalOffset))
+                            : FAR64;
+                        dv.setBigUint64(entryPos, mapped);
                     } else {
                         const val = dv.getUint32(entryPos);
-                        dv.setUint32(entryPos, val === originalOffset ? newOffset : FAR32);
+                        const mapped = (val >= originalOffset && val < dataEnd)
+                            ? newOffset + (val - originalOffset)
+                            : FAR32;
+                        dv.setUint32(entryPos, mapped);
                     }
                 }
             } else {
@@ -230,20 +243,27 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
         video.muted = true;
         video.preload = 'auto';
 
-        const cleanup = () => {
+        let loaded = false;
+        let resolved = false;
+        const finish = (result: Blob | null) => {
+            if (resolved) return;
+            resolved = true;
             clearTimeout(timer);
             video.remove();
             URL.revokeObjectURL(blobUrl);
+            resolve(result);
         };
         const timer = setTimeout(() => {
             createLogger('thumb')('<video> 解码超时');
-            cleanup(); resolve(null);
+            finish(null);
         }, 10_000);
 
-        // 不使用 seek：微型 MP4 只包含文件头部的连续数据块，
-        // seek 会触发解码器去读取 stco 表中不存在的偏移，导致解码失败。
-        // 直接用 loadeddata 事件，此时首帧已解码完成。
+        // 微型 MP4 只包含文件头部的连续数据块，后续帧可能缺失。
+        // loadeddata 事件表明首帧已解码完成，此时立即截取画面。
+        // 首帧后就忽略 onerror（后续帧缺失不关首帧的事）。
         video.onloadeddata = () => {
+            if (loaded) return;
+            loaded = true;
             createLogger('thumb')(`首帧已就绪: ${video.videoWidth}x${video.videoHeight}`);
             clearTimeout(timer);
             const canvas = document.createElement('canvas');
@@ -252,18 +272,18 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             canvas.width = Math.round((video.videoWidth || 1) * scale);
             canvas.height = Math.round((video.videoHeight || 1) * scale);
             const ctx = canvas.getContext('2d');
-            if (!ctx) { cleanup(); resolve(null); return; }
+            if (!ctx) { finish(null); return; }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             canvas.toBlob((blob) => {
                 createLogger('thumb')('canvas 绘制完成');
-                cleanup();
-                resolve(blob);
+                finish(blob);
             }, 'image/webp', 0.5);
         };
 
-        video.onerror = (e) => {
-            createLogger('thumb')('<video> 解码错误', e);
-            cleanup(); resolve(null);
+        video.onerror = () => {
+            if (loaded) return; // loadeddata 已发生，忽略后续解码错误
+            createLogger('thumb')('<video> 解码错误');
+            finish(null);
         };
     });
 }
