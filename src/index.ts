@@ -215,14 +215,20 @@ async function onServerReady() {
 
 if (config.sslEnabled) {
     // ── HTTPS 模式（仅监听 HTTPS，不启动 HTTP） ──
+    console.log('[SSL] 证书:', config.sslCert);
+    console.log('[SSL] 私钥:', config.sslKey);
 
     /** 读取证书文件，失败时退出进程（仅在启动时调用） */
     function loadSSLCredentials(): { cert: Buffer; key: Buffer } {
         try {
-            return {
-                cert: readFileSync(config.sslCert!),
-                key: readFileSync(config.sslKey!),
-            };
+            const certPath = config.sslCert!;
+            const keyPath = config.sslKey!;
+            console.log('[SSL] 正在读取证书...');
+            const cert = readFileSync(certPath);
+            console.log('[SSL] 正在读取私钥...');
+            const key = readFileSync(keyPath);
+            console.log('[SSL] 证书/私钥读取成功');
+            return { cert, key };
         } catch (err) {
             console.error('[Fatal] 读取 SSL 证书失败:', (err as Error).message);
             process.exit(1);
@@ -237,21 +243,24 @@ if (config.sslEnabled) {
     for (const file of [config.sslCert!, config.sslKey!]) {
         watchFile(file, { interval: 86_400_000 }, (curr, prev) => {
             if (curr.mtime <= prev.mtime) return;
+            console.log(`[SSL] 检测到文件变更: ${file}`);
             try {
                 httpsServer.setSecureContext({
                     cert: readFileSync(config.sslCert!),
                     key: readFileSync(config.sslKey!),
                 });
-                console.log(`[Server] SSL 证书已热重载 (${file})`);
+                console.log(`[SSL] 证书已热重载 (${file})`);
             } catch (err) {
-                console.error(`[Server] SSL 证书热重载失败，保留旧证书:`, (err as Error).message);
+                console.error(`[SSL] 证书热重载失败，保留旧证书:`, (err as Error).message);
             }
         });
     }
+    console.log('[SSL] 证书热更新已启用（每日轮检一次）');
 
     httpsServer.once('listening', onServerReady);
 } else {
     // ── HTTP 模式 ──
+    console.log('[Server] 未配置 SSL 证书，以 HTTP 模式运行');
     const server = http.createServer(app);
     startServer(server, config.port, 'http');
     activeServers.push(server);
