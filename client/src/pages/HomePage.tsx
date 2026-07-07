@@ -111,29 +111,31 @@ export default function HomePage() {
         load();
     }, [load]);
 
-    // 为无缩略图的视频生成客户端缩略图
+    // 为无缩略图的视频生成客户端缩略图（串行执行，避免同时下载大量视频数据）
     useEffect(() => {
-        const pending: Promise<void>[] = [];
-        for (const item of items) {
-            if (item.thumbUrl) continue;
-            if (!item.mimeType.startsWith('video/')) continue;
-            if (generatedRef.current.has(item.id)) continue;
-            generatedRef.current.add(item.id);
+        const todo = items.filter(
+            (item) => !item.thumbUrl && item.mimeType.startsWith('video/') && !generatedRef.current.has(item.id)
+        );
+        for (const item of todo) generatedRef.current.add(item.id);
 
-            const videoUrl = resolveApiUrl(item.streamUrl);
-            pending.push(
-                obtainThumbnailUrl(item.id, videoUrl).then((url) => {
-                    if (url) {
-                        setGeneratedThumbs((prev) => ({ ...prev, [item.id]: url }));
-                        thumbUrlsRef.current.push(url);
-                    }
-                }),
-            );
-        }
-        // 组件卸载时回收 blob URL
+        let cancelled = false;
+        const urls: string[] = [];
+        (async () => {
+            for (const item of todo) {
+                if (cancelled) break;
+                const url = await obtainThumbnailUrl(item.id, resolveApiUrl(item.streamUrl));
+                if (cancelled) { if (url) URL.revokeObjectURL(url); break; }
+                if (url) {
+                    urls.push(url);
+                    thumbUrlsRef.current.push(url);
+                    setGeneratedThumbs((prev) => ({ ...prev, [item.id]: url }));
+                }
+            }
+        })();
+
         return () => {
-            for (const url of thumbUrlsRef.current) URL.revokeObjectURL(url);
-            thumbUrlsRef.current = [];
+            cancelled = true;
+            for (const url of urls) URL.revokeObjectURL(url);
         };
     }, [items]);
 
