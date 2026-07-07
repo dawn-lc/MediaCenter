@@ -25,10 +25,15 @@ export async function generateVideoThumbnail(
     videoUrl: string,
     _seekTime = 0.3,
 ): Promise<Blob | null> {
+    const log = (msg: string) => console.log(`[thumb] ${msg}`);
+    const shortUrl = videoUrl.length > 80 ? videoUrl.slice(0, 80) + '...' : videoUrl;
+    log(`开始: ${shortUrl}`);
 
     // ── ① 拉取文件头部 ──
+    log(`拉取头部 0-${HEAD_SIZE - 1}`);
     const headBuf = await rangeFetch(videoUrl, 0, HEAD_SIZE - 1);
-    if (!headBuf) return null;
+    if (!headBuf) { log('头部拉取失败'); return null; }
+    log(`头部拉取成功: ${(headBuf.byteLength / 1024).toFixed(1)}KB`);
 
     let moovBuf: ArrayBuffer | null = findAtom(headBuf, 'moov');
     let fileSize = 0;
@@ -36,40 +41,56 @@ export async function generateVideoThumbnail(
 
     // ── ② 若头部无 moov，拉尾部 ──
     if (!moovBuf) {
+        log('头部未找到 moov，尝试尾部');
         const fs = await getFileSize(videoUrl);
-        if (!fs) return null;
+        if (!fs) { log('获取文件大小失败'); return null; }
         fileSize = fs;
+        log(`文件总大小: ${(fileSize / 1024 / 1024).toFixed(1)}MB`);
 
         const tailStart = Math.max(0, fileSize - TAIL_SIZE);
+        log(`拉取尾部 ${tailStart}-${fileSize - 1}`);
         const tailBuf = await rangeFetch(videoUrl, tailStart, fileSize - 1);
-        if (!tailBuf) return null;
+        if (!tailBuf) { log('尾部拉取失败'); return null; }
 
         moovBuf = findAtom(tailBuf, 'moov');
-        if (!moovBuf) return null; // 无 moov，非标准 MP4
+        if (!moovBuf) { log('尾部也未找到 moov，放弃'); return null; }
         moovAtTail = true;
+        log('尾部找到 moov');
+    } else {
+        log('头部找到 moov');
     }
 
     // ── ③ 解析首帧偏移 ──
+    log('解析首帧偏移...');
     const frameInfo = parseFirstVideoFrame(moovBuf);
-    if (!frameInfo) return null;
+    if (!frameInfo) { log('解析首帧偏移失败'); return null; }
+    log(`首帧: offset=${frameInfo.offset}, size=${(frameInfo.size / 1024).toFixed(1)}KB`);
 
     // 若首帧已在头部的范围中，直接取；否则单独下载
     let frameBuf: ArrayBuffer;
-    const frameEnd = moovAtTail ? frameInfo.offset + frameInfo.size : frameInfo.offset + frameInfo.size;
-    if (!moovAtTail && frameEnd <= HEAD_SIZE) {
+    if (!moovAtTail && (frameInfo.offset + frameInfo.size <= HEAD_SIZE)) {
+        log('首帧已在头部数据中，直接截取');
         frameBuf = headBuf.slice(frameInfo.offset, frameInfo.offset + frameInfo.size);
     } else {
-        const f = await rangeFetch(videoUrl, frameInfo.offset, frameInfo.offset + frameInfo.size - 1);
-        if (!f) return null;
+        const end = frameInfo.offset + frameInfo.size - 1;
+        log(`单独拉取首帧: ${frameInfo.offset}-${end}`);
+        const f = await rangeFetch(videoUrl, frameInfo.offset, end);
+        if (!f) { log('首帧拉取失败'); return null; }
         frameBuf = f;
     }
+    log(`首帧数据: ${(frameBuf.byteLength / 1024).toFixed(1)}KB`);
 
     // ── ④ 拼装微型 MP4 ──
+    log('拼装微型 MP4...');
     const mp4Blob = buildMiniMp4(headBuf, moovBuf, frameBuf, frameInfo.offset);
-    if (!mp4Blob) return null;
+    if (!mp4Blob) { log('拼装失败'); return null; }
+    log(`微型 MP4: ${(mp4Blob.size / 1024).toFixed(1)}KB`);
 
     // ── ⑤ 喂给 <video> 解码 ──
-    return decodeFrame(mp4Blob);
+    log('喂给 <video> 解码...');
+    const result = await decodeFrame(mp4Blob);
+    log(result ? '缩略图生成成功' : '解码失败');
+    return result;
 }
 
 // ── 辅助函数 ──
@@ -121,12 +142,13 @@ function buildMiniMp4(
 ): Blob | null {
     // 取 ftyp（前 8 字节起）
     const ftyp = findAtom(headBuf, 'ftyp');
-    if (!ftyp) return null;
+    if (!ftyp) { console.log('[thumb] 未找到 ftyp'); return null; }
 
     // 修正 moov 中的 stco/co64 偏移
     // 新偏移 = ftyp大小 + 修后的moov大小 + mdat头大小(8)
     const newOffset = ftyp.byteLength + moovBuf.byteLength + 8;
     const fixedMoov = fixStco(new DataView(moovBuf.slice(0)), originalFrameOffset, newOffset);
+    console.log(`[thumb] 修正偏移: ${originalFrameOffset} → ${newOffset}`);
 
     // mdat 外壳
     const mdatHeader = new ArrayBuffer(8);
@@ -193,11 +215,18 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             video.remove();
             URL.revokeObjectURL(blobUrl);
         };
-        const timer = setTimeout(() => { cleanup(); resolve(null); }, 10_000);
+        const timer = setTimeout(() => {
+            console.log('[thumb] <video> 解码超时');
+            cleanup(); resolve(null);
+        }, 10_000);
 
-        video.onloadedmetadata = () => { video.currentTime = 0; };
+        video.onloadedmetadata = () => {
+            console.log('[thumb] <video> 元数据就绪，currentTime=0');
+            video.currentTime = 0;
+        };
 
         video.onseeked = () => {
+            console.log(`[thumb] seek 完成: ${video.videoWidth}x${video.videoHeight}`);
             clearTimeout(timer);
             const canvas = document.createElement('canvas');
             const maxW = 200;
@@ -208,12 +237,16 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             if (!ctx) { cleanup(); resolve(null); return; }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             canvas.toBlob((blob) => {
+                console.log('[thumb] canvas 绘制完成');
                 cleanup();
                 resolve(blob);
             }, 'image/webp', 0.5);
         };
 
-        video.onerror = () => { cleanup(); resolve(null); };
+        video.onerror = (e) => {
+            console.log('[thumb] <video> 解码错误:', e);
+            cleanup(); resolve(null);
+        };
     });
 }
 
