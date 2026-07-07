@@ -62,11 +62,6 @@ export default defineConfig({
                 navigateFallback: '/offline.html',
                 navigateFallbackDenylist: [/^\/api\//],
                 runtimeCaching: [
-                    // API 请求：纯网络（不缓存）
-                    {
-                        urlPattern: /\/api\//i,
-                        handler: 'NetworkOnly',
-                    },
                     // 媒体文件：纯网络（不缓存大文件）
                     {
                         urlPattern: /\.(?:mp4|webm|ogg|mkv|mp3|wav|flac|m3u8|ts)($|\?)/i,

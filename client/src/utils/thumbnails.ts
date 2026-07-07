@@ -10,7 +10,7 @@ const THUMB_PREFIX = '/thumb/client/';
 /** 生成视频缩略图，返回 Blob */
 export function generateVideoThumbnail(
     videoUrl: string,
-    seekTime = 2,
+    seekTime = 0.3,
 ): Promise<Blob | null> {
     return new Promise((resolve) => {
         const video = document.createElement('video');
@@ -27,17 +27,19 @@ export function generateVideoThumbnail(
 
         video.onseeked = () => {
             const canvas = document.createElement('canvas');
-            const maxW = 320;
+            // 卡片缩略图 200px 宽已足够，大幅减少数据量
+            const maxW = 200;
             const scale = Math.min(1, maxW / video.videoWidth);
             canvas.width = Math.round(video.videoWidth * scale);
             canvas.height = Math.round(video.videoHeight * scale);
             const ctx = canvas.getContext('2d');
             if (!ctx) { resolve(null); return; }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // WEBP 0.5 质量在体积与画质间取得平衡
             canvas.toBlob((blob) => {
                 video.remove();
                 resolve(blob);
-            }, 'image/webp', 0.7);
+            }, 'image/webp', 0.5);
         };
 
         video.onerror = () => {
@@ -91,16 +93,17 @@ export async function obtainThumbnailUrl(
     mediaId: string,
     videoUrl: string,
 ): Promise<string | null> {
-    // 1. 尝试缓存
+    // 1. 尝试缓存（后续直接从 SW 读取，无需网络）
     const cached = await getCachedThumbnailUrl(mediaId);
     if (cached) return cached;
 
-    // 2. 生成
+    // 2. 生成缩略图
     const blob = await generateVideoThumbnail(videoUrl);
     if (!blob) return null;
 
-    // 3. 缓存
+    // 3. 写入 SW 缓存（下次直接由 SW 响应，不经过网络）
     await cacheThumbnail(mediaId, blob);
 
+    // 4. 直接使用生成的 blob 创建 URL，避免从缓存重新读取
     return URL.createObjectURL(blob);
 }
