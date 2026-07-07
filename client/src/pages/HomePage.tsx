@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Api, resolveApiUrl } from '../api';
 import type { Media } from '../types';
 import { formatFileSize, formatDate, getMediaIcon, getMediaTypeLabel, getTagGroupMap } from '../utils';
+import { obtainThumbnailUrl } from '../utils/thumbnails';
 import { useAuthStore } from '../stores/auth';
 import { usePlaylistStore } from '../stores/playlist';
 import { toast } from 'sonner';
@@ -57,6 +58,9 @@ export default function HomePage() {
 
     const [items, setItems] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
+    const [generatedThumbs, setGeneratedThumbs] = useState<Record<string, string>>({});
+    const generatedRef = useRef<Set<string>>(new Set());
+    const thumbUrlsRef = useRef<string[]>([]);
     const saved = loadState();
     const [page, setPage] = useState(saved.page || 1);
     const [totalPages, setTotalPages] = useState(1);
@@ -106,6 +110,32 @@ export default function HomePage() {
     useEffect(() => {
         load();
     }, [load]);
+
+    // 为无缩略图的视频生成客户端缩略图
+    useEffect(() => {
+        const pending: Promise<void>[] = [];
+        for (const item of items) {
+            if (item.thumbUrl) continue;
+            if (!item.mimeType.startsWith('video/')) continue;
+            if (generatedRef.current.has(item.id)) continue;
+            generatedRef.current.add(item.id);
+
+            const videoUrl = resolveApiUrl(item.streamUrl);
+            pending.push(
+                obtainThumbnailUrl(item.id, videoUrl).then((url) => {
+                    if (url) {
+                        setGeneratedThumbs((prev) => ({ ...prev, [item.id]: url }));
+                        thumbUrlsRef.current.push(url);
+                    }
+                }),
+            );
+        }
+        // 组件卸载时回收 blob URL
+        return () => {
+            for (const url of thumbUrlsRef.current) URL.revokeObjectURL(url);
+            thumbUrlsRef.current = [];
+        };
+    }, [items]);
 
     // 持久化搜索/筛选/排序状态到 localStorage
     useEffect(() => {
@@ -360,9 +390,16 @@ export default function HomePage() {
                         {items.map((item) => (
                             <div key={item.id} className="media-card" onClick={() => navigate('/player/' + item.id)}>
                                 <div className="media-card-thumb">
-                                    {item.thumbUrl ? (
+                                    {item.thumbUrl || generatedThumbs[item.id] ? (
                                         <img
-                                            src={resolveApiUrl(item.streamUrl)}
+                                            src={item.thumbUrl ? resolveApiUrl(item.thumbUrl) : generatedThumbs[item.id]}
+                                            alt={item.title}
+                                            className="img-cover"
+                                            loading="lazy"
+                                        />
+                                    ) : item.mimeType.startsWith('image/') ? (
+                                        <img
+                                            src={generatedThumbs[item.id]}
                                             alt={item.title}
                                             className="img-cover"
                                             loading="lazy"

@@ -72,6 +72,21 @@ export default defineConfig({
                         urlPattern: /\.(?:mp4|webm|ogg|mkv|mp3|wav|flac|m3u8|ts)($|\?)/i,
                         handler: 'NetworkOnly',
                     },
+                    // 缩略图：缓存优先（由服务端生成或客户端生成后写入缓存）
+                    {
+                        urlPattern: /\/thumb($|\?)/i,
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'thumbnails',
+                            expiration: {
+                                maxEntries: 200,
+                                maxAgeSeconds: 60 * 60 * 24 * 365, // 1年
+                            },
+                            cacheableResponse: {
+                                statuses: [0, 200],
+                            },
+                        },
+                    },
                     // 图片资源：Stale-While-Revalidate
                     {
                         urlPattern: /\.(?:jpg|jpeg|png|gif|webp|svg|ico|avif)($|\?)/i,
