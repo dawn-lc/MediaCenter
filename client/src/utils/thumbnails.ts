@@ -9,7 +9,7 @@ import { createLogger } from './log';
 
 const THUMB_CACHE = 'thumbnails';
 const THUMB_PREFIX = '/thumb/client/';
-const HEAD_SIZE = 2_097_152;  // 拉取文件头部 2MB（覆盖 >95% 的 moov）
+const HEAD_SIZE = 1_048_576;  // 拉取文件头部 1MB（覆盖 ~90% 的头部位 moov）
 const TAIL_SIZE = 1_048_576;  // moov 在尾部时拉取尾部 1MB
 
 /**
@@ -277,7 +277,7 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             canvas.toBlob((blob) => {
                 createLogger('thumb')('canvas 绘制完成');
                 finish(blob);
-            }, 'image/webp', 0.5);
+            }, 'image/webp', 0.7);
         };
 
         video.onerror = () => {
