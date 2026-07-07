@@ -54,8 +54,7 @@ if (requiredVars.length > 0) {
 const sslEnabled = !!(process.env.SSL_CERT && process.env.SSL_KEY);
 
 const config = {
-    port: parseInt(process.env.PORT || (sslEnabled ? '80' : '3000'), 10),
-    sslPort: parseInt(process.env.SSL_PORT || '443', 10),
+    port: parseInt(process.env.PORT || '3000', 10),
     sslCert: process.env.SSL_CERT,          // SSL 证书路径，可选
     sslKey: process.env.SSL_KEY,            // SSL 私钥路径，可选
     sslEnabled,                             // 是否启用 HTTPS

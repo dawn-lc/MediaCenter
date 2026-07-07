@@ -2,7 +2,6 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import http from 'http';
 import https from 'https';
 import { readFileSync, watchFile } from 'fs';
-import { createPrivateKey, createPublicKey, X509Certificate, type KeyObject } from 'crypto';
 import cors from 'cors';
 import { join, resolve } from 'path';
 import config from './config';
@@ -219,50 +218,14 @@ if (config.sslEnabled) {
     console.log('[SSL] 证书:', config.sslCert);
     console.log('[SSL] 私钥:', config.sslKey);
 
-    /** 读取并校验证书文件，失败时退出进程（仅在启动时调用） */
+    /** 读取证书文件，失败时退出进程 */
     function loadSSLCredentials(): { cert: Buffer; key: Buffer } {
         try {
-            const certPath = config.sslCert!;
-            const keyPath = config.sslKey!;
             console.log('[SSL] 正在读取证书...');
-            const cert = readFileSync(certPath);
+            const cert = readFileSync(config.sslCert!);
             console.log('[SSL] 正在读取私钥...');
-            const key = readFileSync(keyPath);
+            const key = readFileSync(config.sslKey!);
             console.log('[SSL] 证书/私钥读取成功');
-
-            // 提取证书链中的第一张叶子证书
-            const certChain = cert.toString('utf-8');
-            const firstCertPem = certChain.match(
-                /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/
-            )?.[0];
-            if (!firstCertPem) {
-                console.error('[Fatal] 证书文件中未找到有效的 PEM 证书');
-                process.exit(1);
-            }
-
-            // 验证私钥
-            let privateKey: KeyObject;
-            try {
-                privateKey = createPrivateKey(key);
-            } catch {
-                console.error('[Fatal] 私钥格式无效，请确认是 PEM 格式且未设置 passphrase');
-                process.exit(1);
-            }
-
-            // 验证证书与私钥是否匹配（比较公钥指纹）
-            try {
-                const x509 = new X509Certificate(firstCertPem);
-                const certPub = x509.publicKey.export({ type: 'spki', format: 'pem' });
-                const keyPub = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' });
-                if (certPub !== keyPub) {
-                    console.error('[Fatal] 证书与私钥不匹配，请检查文件是否正确对应');
-                    process.exit(1);
-                }
-                console.log(`[SSL] 证书验证通过: ${x509.subject} (${x509.validTo})`);
-            } catch (err) {
-                console.error('[Fatal] 证书验证失败:', (err as Error).message);
-                process.exit(1);
-            }
             return { cert, key };
         } catch (err) {
             console.error('[Fatal] 读取 SSL 证书失败:', (err as Error).message);
@@ -271,7 +234,7 @@ if (config.sslEnabled) {
     }
 
     const httpsServer = https.createServer(loadSSLCredentials(), app);
-    startServer(httpsServer, config.sslPort, 'https');
+    startServer(httpsServer, config.port, 'https');
     activeServers.push(httpsServer);
 
     // 监听证书文件变化，热重载 TLS 上下文

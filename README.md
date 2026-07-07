@@ -30,10 +30,9 @@ UPLOAD_DIR=./uploads
 | `ADMIN_USERNAME` | 管理员用户名                                      | **必填** |
 | `ADMIN_PASSWORD` | 管理员密码                                        | **必填** |
 | `UPLOAD_DIR`     | 上传目录                                          | **必填** |
-| `PORT`           | HTTP 端口                                         | `3000`   |
+| `PORT`           | 监听端口                                          | `3000`   |
 | `SSL_CERT`       | SSL 证书路径（与 `SSL_KEY` 同时设置时启用 HTTPS） | 可选     |
 | `SSL_KEY`        | SSL 私钥路径                                      | 可选     |
-| `SSL_PORT`       | HTTPS 端口                                        | `443`    |
 | `API_TOKEN`      | 静态 API 令牌                                     | 可选     |
 
 ### 启动
@@ -69,11 +68,12 @@ docker build -t mediacenter .
 docker run -d --name mediacenter -p 3000:3000 --env-file .env mediacenter
 ```
 
-HTTPS 模式（不启动 HTTP）：
+HTTPS 模式：
 
 ```bash
 docker run -d --name mediacenter -p 443:443 \
   -v /certs:/certs:ro \
+  -e PORT=443 \
   -e SSL_CERT=/certs/fullchain.pem \
   -e SSL_KEY=/certs/privkey.pem \
   --env-file .env mediacenter
