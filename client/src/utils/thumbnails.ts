@@ -181,9 +181,12 @@ function buildMiniMp4(
     return new Blob([ftyp, fixedMoov, mdatHeader, frameBuf], { type: 'video/mp4' });
 }
 
-/** 修正 moov 中 stco/co64 表的偏移值 */
+/** 修正 moov 中 stco/co64 表：
+ *  - 匹配 originalOffset 的条目 → newOffset（指向微型 MP4 中的首帧）
+ *  - 其余条目 → FAR（越过大文件偏移，解码器越界读取会优雅失败） */
 function fixStco(dv: DataView, originalOffset: number, newOffset: number): ArrayBuffer {
-    // 递归遍历所有 atom
+    const FAR32 = 0xFFFFFFFF;
+    const FAR64 = BigInt('0xFFFFFFFFFFFFFFFF');
     function walk(start: number, end: number) {
         let pos = start;
         while (pos + 8 <= end) {
@@ -194,11 +197,6 @@ function fixStco(dv: DataView, originalOffset: number, newOffset: number): Array
             );
             if (size < 8) break;
             if (type === 'stco' || type === 'co64') {
-                // stco/co64 结构（含 8B header）:
-                //   pos+0: size, pos+4: type
-                //   pos+8: version(1) + flags(3)
-                //   pos+12: entryCount(4)
-                //   pos+16: entries...
                 const entryCount = dv.getUint32(pos + 12);
                 const entrySize = type === 'co64' ? 8 : 4;
                 for (let i = 0; i < entryCount; i++) {
@@ -206,10 +204,10 @@ function fixStco(dv: DataView, originalOffset: number, newOffset: number): Array
                     if (entryPos + entrySize > end) break;
                     if (entrySize === 8) {
                         const val = Number(dv.getBigUint64(entryPos));
-                        dv.setBigUint64(entryPos, BigInt(val === originalOffset ? newOffset : 0));
+                        dv.setBigUint64(entryPos, val === originalOffset ? BigInt(newOffset) : FAR64);
                     } else {
                         const val = dv.getUint32(entryPos);
-                        dv.setUint32(entryPos, val === originalOffset ? newOffset : 0);
+                        dv.setUint32(entryPos, val === originalOffset ? newOffset : FAR32);
                     }
                 }
             } else {
