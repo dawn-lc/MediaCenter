@@ -9,6 +9,8 @@
 // co64、stsc、version/flags 等边界情况。
 // ---------------------------------------------------------------------------
 
+import { createLogger } from './log';
+
 // ── 原子层 ──
 
 /** 读取 atom 头部，返回 { type, dataStart, dataEnd }，无匹配时返回 null */
@@ -32,15 +34,19 @@ export function readAtomHeader(
     return { type, dataStart: offset + 8, dataEnd: offset + size };
 }
 
-/** 递归搜索指定名称的 atom，返回完整 atom 数据（含头部） */
-export function findAtom(
+/**
+ * 从已知的原子数据顶层递归搜索指定名称的 atom。
+ *
+ * 适用于在已知结构的数据（如 trak、stbl、moov 等）中按原子树结构精确查找，
+ * 不会将二进制数据中的随机 4 字节误认为 atom。
+ */
+export function findAtomIn(
     buf: ArrayBuffer, target: string,
 ): ArrayBuffer | null {
     const containerTypes = new Set([
         'moov', 'trak', 'mdia', 'minf', 'stbl', 'edts', 'udta', 'meta',
         'dinf', 'mvex', 'moof', 'traf',
     ]);
-
     function walk(start: number, end: number): ArrayBuffer | null {
         let pos = start;
         while (pos < end) {
@@ -57,6 +63,39 @@ export function findAtom(
     }
     return walk(0, buf.byteLength);
 }
+
+/**
+ * 在任意二进制数据中扫描 4 字节签名查找 atom。
+ *
+ * 适用于在文件头部/尾部切片中搜索 moov、ftyp 等可能跨片段的 atom。
+ * 不依赖原子边界对齐，但可能因随机数据中的相同签名产生假阳性。
+ */
+export function findAtomScan(
+    buf: ArrayBuffer, target: string,
+): ArrayBuffer | null {
+    const dv = new DataView(buf);
+    const targetCode = target.charCodeAt(0) << 24 |
+        target.charCodeAt(1) << 16 |
+        target.charCodeAt(2) << 8 |
+        target.charCodeAt(3);
+    const len = buf.byteLength;
+
+    for (let pos = 0; pos <= len - 4; pos++) {
+        const code = dv.getUint32(pos);
+        if (code !== targetCode) continue;
+        if (pos < 4) continue;
+        const size = dv.getUint32(pos - 4);
+        if (size < 8 || size > len + 8) continue;
+        const start = pos - 4;
+        const end = start + size;
+        if (end > len + 4) continue;
+        return buf.slice(start, Math.min(end, len));
+    }
+    return null;
+}
+
+/** 兼容别名：findAtom 默认用精确原子树查找 */
+export const findAtom = findAtomIn;
 
 /** 收集指定名称的所有同级 atom（已在同一层级遍历，不递归） */
 function collectSiblings(
@@ -86,6 +125,7 @@ function readFlags(buf: ArrayBuffer, start: number): number {
 
 /** 从视频轨道的 stbl 中提取首帧信息 */
 function parseStbl(stblData: ArrayBuffer): { offset: number; size: number } | null {
+    const log = createLogger('mp4');
     let stco: ArrayBuffer | null = null;
     let co64: ArrayBuffer | null = null;
     let stsz: ArrayBuffer | null = null;
@@ -102,46 +142,42 @@ function parseStbl(stblData: ArrayBuffer): { offset: number; size: number } | nu
         pos = h.dataEnd;
     }
 
-    // stsz
-    if (!stsz) return null;
+    // stsz（原子含 8B header + 4B version/flags，数据偏移 12）
+    if (!stsz) { log('stsz 未找到'); return null; }
     const stszDv = new DataView(stsz);
-    // version(1) + flags(3) + uniformSize(4) + sampleCount(4)
-    const uniformSize = stszDv.getUint32(4);
-    const sampleCount = stszDv.getUint32(8);
-    if (sampleCount === 0) return null;
-    const firstSampleSize = uniformSize > 0 ? uniformSize : stszDv.getUint32(12);
+    const uniformSize = stszDv.getUint32(12);
+    const sampleCount = stszDv.getUint32(16);
+    if (sampleCount === 0) { log('stsz sampleCount=0'); return null; }
+    const firstSampleSize = uniformSize > 0 ? uniformSize : stszDv.getUint32(20);
+    log(`stsz: uniform=${uniformSize}, count=${sampleCount}, firstSize=${firstSampleSize}`);
 
-    // stco / co64
+    // stco / co64（原子含 8B header + 4B version/flags，entry 偏移 12）
     const offsetTable = co64 || stco;
-    if (!offsetTable) return null;
+    if (!offsetTable) { log('stco/co64 未找到'); return null; }
     const offDv = new DataView(offsetTable);
     const isCo64 = co64 !== null;
-    // version(1) + flags(3) + entryCount(4)
-    const entryCount = offDv.getUint32(4);
-    if (entryCount === 0) return null;
+    const entryCount = offDv.getUint32(12);
+    log(`stco/co64: isCo64=${isCo64}, entryCount=${entryCount}`);
+    if (entryCount === 0) { log('stco entryCount=0'); return null; }
 
     const entrySize = isCo64 ? 8 : 4;
+    const entryOffset = 16; // 跳过 8B header + 4B version/flags + 4B entryCount
     let firstChunkOffset: number;
     if (isCo64) {
-        firstChunkOffset = Number(offDv.getBigUint64(8));
+        firstChunkOffset = Number(offDv.getBigUint64(entryOffset));
     } else {
-        firstChunkOffset = offDv.getUint32(8);
+        firstChunkOffset = offDv.getUint32(entryOffset);
     }
 
-    // stsc（sample-to-chunk）：判断首帧是否在首块开头
-    // 若无 stsc，或 stsc 表首项显示首块只有 1 个 sample，则首帧就在首块开头
+    // stsc（sample-to-chunk）
+    // 原子含 8B header + 4B version/flags，表数据偏移 12
     if (stsc) {
         const stscDv = new DataView(stsc);
-        const stscEntryCount = stscDv.getUint32(4);
+        const stscEntryCount = stscDv.getUint32(12);
         if (stscEntryCount > 0) {
-            // stsc 表：firstChunk(4) + samplesPerChunk(4) + sampleDescIndex(4)
-            const firstChunkInTable = stscDv.getUint32(8);
-            const samplesPerFirstChunk = stscDv.getUint32(12);
-            // 如果第一个 chunk 有多个 sample，第一个 sample 的偏移需要计算
-            // 但首帧 = 首块首样本，偏移就是 chunkOffset，大小来自 stsz
-            // 只有当首块有 >1 sample 且首帧不是首样本时才需要调整
-            // 绝大多数情况下首块只有 1 个 sample（即首帧）
-            // 即使有多个，我们取的 chunkOffset + stsz[0] 也是正确的
+            // stsc 表项：firstChunk(4) + samplesPerChunk(4) + sampleDescIndex(4)
+            // 首个表项在偏移 16 处
+            // 第一块通常只有一个 sample，无需调整
         }
     }
 
@@ -152,9 +188,10 @@ function parseStbl(stblData: ArrayBuffer): { offset: number; size: number } | nu
 
 /** 判断一个 trak 是否为视频轨道，是则返回其 stbl 数据 */
 function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
+    const log = createLogger('mp4');
     // 找 hdlr → 判断 track 类型
     const hdlr = findAtom(trakData, 'hdlr');
-    if (!hdlr) return null;
+    if (!hdlr) { log('hdlr 未找到'); return null; }
     const hdlrDv = new DataView(hdlr);
     // hdlr atom 结构（含头部 8B）:
     //   0-3: size, 4-7: 'hdlr', 8: version, 9-11: flags
@@ -163,15 +200,23 @@ function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
         hdlrDv.getUint8(16), hdlrDv.getUint8(17),
         hdlrDv.getUint8(18), hdlrDv.getUint8(19),
     );
-    if (handlerType !== 'vide') return null;
+    log(`hdlr handlerType=${handlerType}`);
+    if (handlerType !== 'vide') { log('非视频轨道，跳过'); return null; }
 
     // 视频轨道，取 mdia → minf → stbl
     const mdia = findAtom(trakData, 'mdia');
-    if (!mdia) return null;
+    if (!mdia) { log('mdia 未找到'); return null; }
     const minf = findAtom(mdia, 'minf');
-    if (!minf) return null;
+    if (!minf) { log('minf 未找到'); return null; }
     const stbl = findAtom(minf, 'stbl');
-    return stbl || null;
+    if (!stbl) { log('stbl 未找到'); return null; }
+    // findAtom 返回含头部的完整 atom，stbl 头部 8B 后才是子 atom
+    return trimAtomHeader(stbl);
+}
+
+/** 去掉 atom 的 8 字节头部，返回纯数据区 */
+function trimAtomHeader(atom: ArrayBuffer): ArrayBuffer {
+    return atom.byteLength > 8 ? atom.slice(8) : atom;
 }
 
 // ── 公开 API ──
@@ -180,20 +225,30 @@ function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
 export function parseFirstVideoFrame(
     moovBuffer: ArrayBuffer,
 ): { offset: number; size: number } | null {
+    const log = createLogger('mp4');
     // 遍历 moov 下的所有 trak
     let pos = 8; // 跳过 moov 自身的头部
+    let trakCount = 0;
     while (pos + 8 <= moovBuffer.byteLength) {
         const h = readAtomHeader(moovBuffer, pos);
         if (!h) break;
         if (h.type === 'trak') {
+            trakCount++;
+            log(`找到 trak #${trakCount}`);
             const trakData = moovBuffer.slice(h.dataStart, h.dataEnd);
             const stbl = extractVideoStbl(trakData);
             if (stbl) {
+                log('找到视频轨道 stbl');
                 const result = parseStbl(stbl);
-                if (result) return result;
+                if (result) {
+                    log(`首帧解析成功: offset=${result.offset}, size=${result.size}`);
+                    return result;
+                }
+                log('parseStbl 返回 null');
             }
         }
         pos = h.dataEnd;
     }
+    log(`未找到视频轨道 (共 ${trakCount} 个 trak)`);
     return null;
 }
