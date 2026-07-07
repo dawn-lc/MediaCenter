@@ -74,7 +74,7 @@ export async function generateVideoThumbnail(
 
 // ── 辅助函数 ──
 
-/** 带 Range 的 fetch，返回 ArrayBuffer */
+/** 带 Range 的 fetch，只接受 206 Partial Content，否则返回 null */
 async function rangeFetch(
     url: string, start: number, end: number,
 ): Promise<ArrayBuffer | null> {
@@ -82,7 +82,8 @@ async function rangeFetch(
         const resp = await fetch(url, {
             headers: { Range: `bytes=${start}-${end}` },
         });
-        if (!resp.ok && resp.status !== 206) return null;
+        // 服务器必须返回 206 Partial Content，否则说明不支持 Range 请求
+        if (resp.status !== 206) return null;
         return await resp.arrayBuffer();
     } catch {
         return null;
@@ -92,9 +93,20 @@ async function rangeFetch(
 /** HEAD 请求获取文件总大小 */
 async function getFileSize(url: string): Promise<number | null> {
     try {
-        const resp = await fetch(url, { method: 'HEAD' });
-        const size = parseInt(resp.headers.get('Content-Range')?.split('/')[1] || resp.headers.get('Content-Length') || '', 10);
-        return isNaN(size) ? null : size;
+        // 先尝试 Range 请求一个字节，从 Content-Range 拿到总大小
+        const resp = await fetch(url, {
+            headers: { Range: 'bytes=0-0' },
+        });
+        if (resp.status === 206) {
+            const cr = resp.headers.get('Content-Range');
+            if (cr) {
+                const size = parseInt(cr.split('/')[1], 10);
+                if (!isNaN(size)) return size;
+            }
+        }
+        // fallback: Content-Length
+        const cl = parseInt(resp.headers.get('Content-Length') || '', 10);
+        return isNaN(cl) ? null : cl;
     } catch {
         return null;
     }
