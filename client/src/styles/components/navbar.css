@@ -28,12 +28,8 @@
 .navbar-brand .brand-icon {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
     border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
+    object-fit: contain;
 }
 
 .navbar-nav {

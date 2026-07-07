@@ -325,5 +325,10 @@
         "notFound": "Author not found",
         "noUpdate": "No fields to update",
         "invalidParam": "Invalid parameter"
+    },
+    "pwa": {
+        "offline": "Network disconnected, some features may be unavailable",
+        "offlineBanner": "Network disconnected, some features may be unavailable",
+        "online": "Network restored"
     }
 }

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480">
+    <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#6c5ce7"/>
+        <stop offset="100%" style="stop-color:#a78bfa"/>
+    </linearGradient>
+    </defs>
+    <rect width="480" height="480" rx="90" fill="url(#grad)"/>
+    <polygon points="153,120 153,360 363,240" fill="white"/>
+</svg>

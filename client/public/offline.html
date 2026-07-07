@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title">离线中 - MediaCenter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .offline-card {
+            text-align: center;
+            max-width: 400px;
+            padding: 48px 32px;
+            background: #1a1a2e;
+            border-radius: 16px;
+            border: 1px solid #2d2d4e;
+        }
+
+        .icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            fill: none;
+            stroke: #6c5ce7;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #888;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 28px;
+            background: #6c5ce7;
+            color: #fff;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #5a4bd1;
+        }
+
+        .status {
+            margin-top: 16px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="offline-card">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M1 1l22 22" />
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+            <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <line x1="12" y1="20" x2="12.01" y2="20" />
+        </svg>
+        <h1 data-i18n="heading">网络连接已断开</h1>
+        <p data-i18n="desc">当前没有网络连接，无法访问 MediaCenter。<br>请检查网络后重试，部分已缓存的内容可能仍然可用。</p>
+        <a class="btn" href="/" onclick="window.location.reload()" data-i18n="retryBtn">重试连接</a>
+        <div class="status" id="status" data-i18n="waiting">等待网络恢复...</div>
+    </div>
+
+    <script>
+        // ── 简单内置 i18n ──
+        (function () {
+            const lang = (navigator.language || 'zh-CN').startsWith('zh') ? 'zh-CN' : 'en-US';
+
+            const messages = {
+                'zh-CN': {
+                    title: '离线中 - MediaCenter',
+                    heading: '网络连接已断开',
+                    desc: '当前没有网络连接，无法访问 MediaCenter。<br>请检查网络后重试，部分已缓存的内容可能仍然可用。',
+                    retryBtn: '重试连接',
+                    waiting: '等待网络恢复...',
+                    online: '网络已恢复，正在重新连接...',
+                    offline: '网络仍处于断开状态',
+                },
+                'en-US': {
+                    title: 'Offline - MediaCenter',
+                    heading: 'No Internet Connection',
+                    desc: 'Unable to access MediaCenter while offline.<br>Please check your connection and try again. Some cached content may still be available.',
+                    retryBtn: 'Retry Connection',
+                    waiting: 'Waiting for network...',
+                    online: 'Network restored, reconnecting...',
+                    offline: 'Still offline',
+                },
+            };
+
+            const m = messages[lang] || messages['zh-CN'];
+
+            // 更新所有 data-i18n 元素
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (m[key] !== undefined) {
+                    if (el.tagName === 'TITLE') {
+                        el.textContent = m[key];
+                    } else {
+                        el.innerHTML = m[key];
+                    }
+                }
+            });
+        })();
+
+        // ── 在线/离线状态更新 ──
+        const statusEl = document.getElementById('status');
+
+        window.addEventListener('online', () => {
+            statusEl.textContent = document.querySelector('[data-i18n="online"]')?.textContent || 'Network restored, reconnecting...';
+            setTimeout(() => window.location.reload(), 1000);
+        });
+        window.addEventListener('offline', () => {
+            statusEl.textContent = document.querySelector('[data-i18n="offline"]')?.textContent || 'Still offline';
+        });
+    </script>
+</body>
+
+</html>

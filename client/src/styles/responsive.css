@@ -43,7 +43,6 @@
     .navbar-brand .brand-icon {
         width: 30px;
         height: 30px;
-        font-size: 15px;
     }
 
     /* 显示汉堡按钮，隐藏桌面导航 */
@@ -703,5 +702,53 @@
 
     .navbar-brand {
         font-size: 14px;
+    }
+}
+
+/* ============================================
+   PWA 模式适配
+   ============================================ */
+
+/* 独立模式（添加到主屏幕后） */
+@media all and (display-mode: standalone) {
+
+    /* 防止页面滚动露底 */
+    html {
+        background-color: #0f0f1a;
+    }
+
+    /* 全屏模式下去掉浏览器特有的样式 */
+    body {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* 允许输入框选中 */
+    input,
+    textarea,
+    [contenteditable] {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+
+    /* 导航栏在 standalone 模式下需要更高的层级 */
+    .navbar {
+        z-index: 1000;
+    }
+}
+
+/* window-controls-overlay 模式（Windows PWA 标题栏） */
+@media (display-mode: window-controls-overlay) {
+    .navbar {
+        padding-top: 0;
+        height: 48px;
+    }
+
+    .navbar-brand {
+        margin-left: env(titlebar-area-x, 12px);
+    }
+
+    .navbar-menu {
+        margin-right: env(titlebar-area-width, 0);
     }
 }

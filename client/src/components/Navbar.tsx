@@ -79,7 +79,7 @@ export default function Navbar() {
         <>
             <nav className="navbar">
                 <Link to="/" className="navbar-brand">
-                    <div className="brand-icon">▶</div>
+                    <img className="brand-icon" src="/favicon.svg" alt="MediaCenter" width="36" height="36" />
                     {t('nav.brand')}
                 </Link>
                 {/* 汉堡菜单按钮 */}

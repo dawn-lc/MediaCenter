@@ -80,20 +80,37 @@ app.use(
         immutable: true
     })
 );
-// 2. 其他静态文件（favicon, index.html 等）
+// 2. 其他静态文件（favicon, index.html, manifest, sw 等）
 app.use(
     express.static(publicDir, {
         setHeaders(res, filePath) {
-            if (filePath.endsWith('.html')) {
+            const name = filePath.toLowerCase();
+            // HTML：禁止缓存
+            if (name.endsWith('.html')) {
                 res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                return;
+            }
+            // Service Worker：禁止缓存，必须设置正确的作用域
+            if (name.endsWith('sw.js')) {
+                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                res.setHeader('Service-Worker-Allowed', '/');
+                res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+                return;
+            }
+            // manifest.webmanifest：较短的缓存时间
+            if (name.endsWith('.webmanifest')) {
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+                return;
             }
         }
     })
 );
 
-// SPA fallback：非 API 请求且非静态文件则返回 index.html
+// SPA fallback：非 API / 非静态文件 / 非 SW → 返回 index.html
 app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api/')) return next();
+    // 有扩展名的静态文件直接跳过（由前面的 express.static 处理）
     if (/\.[\w-]+$/.test(req.path)) return next();
     res.sendFile(join(publicDir, 'index.html'));
 });

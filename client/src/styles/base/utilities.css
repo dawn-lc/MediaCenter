@@ -149,6 +149,80 @@
     object-fit: cover;
 }
 
+/* ============================================
+   PWA 相关
+   ============================================ */
+
+/* 离线横幅动画 */
+.offline-banner {
+    will-change: transform;
+}
+
+/* 应用安全区域适配（iOS 刘海屏） */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .safe-area-top {
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .safe-area-bottom {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .app-shell {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+    }
+}
+
+/* PWA 全屏模式下的标题栏拖拽区域（window-controls-overlay） */
+@media (display-mode: window-controls-overlay) {
+    .app-drag-region {
+        -webkit-app-region: drag;
+        app-region: drag;
+        height: 40px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10000;
+    }
+
+    .app-drag-region * {
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+    }
+}
+
+/* PWA 独立模式下的样式优化 */
+@media all and (display-mode: standalone) {
+    body {
+        overscroll-behavior: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* 防止底部导航栏被误触 */
+    .nav-safe-bottom {
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+}
+
+/* 减少非必要的动画（用户偏好） */
+@media (prefers-reduced-motion: reduce) {
+    .offline-banner {
+        transition: none;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
 /* ── 管理页卡片链接 ── */
 .link-card {
     text-decoration: none;

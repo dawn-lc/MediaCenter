@@ -324,5 +324,10 @@
         "notFound": "作者不存在",
         "noUpdate": "没有需要更新的字段",
         "invalidParam": "参数格式错误"
+    },
+    "pwa": {
+        "offline": "网络已断开，部分功能可能不可用",
+        "offlineBanner": "网络已断开，部分功能可能不可用",
+        "online": "网络已恢复"
     }
 }
