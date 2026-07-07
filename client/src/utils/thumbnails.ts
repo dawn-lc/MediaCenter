@@ -38,43 +38,50 @@ export async function generateVideoThumbnail(
     let fileSize = 0;
     let moovAtTail = false;
 
-    // ── ② 若头部无 moov，拉尾部 ──
+    // ── ② 若头部无 moov，拉尾部（逐步放宽搜索范围至 4MB） ──
     if (!moovBuf) {
-        log('头部未找到 moov，尝试尾部');
-        const fs = await getFileSize(videoUrl);
-        if (!fs) { log('获取文件大小失败'); return null; }
-        fileSize = fs;
-        log(`文件总大小: ${(fileSize / 1024 / 1024).toFixed(1)}MB`);
+        for (const headSize of [HEAD_SIZE, HEAD_SIZE * 2, HEAD_SIZE * 4]) {
+            if (moovBuf) break;
+            if (headSize > HEAD_SIZE) {
+                log(`头部放宽至 ${headSize / 1024}KB`);
+                const buf = await rangeFetch(videoUrl, 0, headSize - 1);
+                if (!buf) break;
+                moovBuf = findAtomScan(buf, 'moov');
+                if (moovBuf) break;
+            }
 
-        // 先拉尾部 1MB 定位 moov
-        const tailStart = Math.max(0, fileSize - TAIL_SIZE);
-        log(`拉取尾部 ${tailStart}-${fileSize - 1}`);
-        const tailBuf = await rangeFetch(videoUrl, tailStart, fileSize - 1);
-        if (!tailBuf) { log('尾部拉取失败'); return null; }
+            // 尾部搜索
+            const fs = await getFileSize(videoUrl);
+            if (!fs) { log('获取文件大小失败'); return null; }
+            fileSize = fs;
+            log(`文件总大小: ${(fileSize / 1024 / 1024).toFixed(1)}MB`);
+            const tailSize = headSize;
+            const tailStart = Math.max(Math.floor(fileSize / 2), fileSize - tailSize);
+            if (tailStart >= fileSize) { log('文件太小，不适合尾部搜索'); break; }
+            log(`拉取尾部 ${tailStart}-${fileSize - 1}`);
+            const tailBuf = await rangeFetch(videoUrl, tailStart, fileSize - 1);
+            if (!tailBuf) { log('尾部拉取失败'); break; }
 
-        // 在 tailBuf 中扫描 'moov' 签名
-        const tailView = new DataView(tailBuf);
-        let moovFileOffset = -1;
-        let moovSize = 0;
-        for (let i = 4; i <= tailBuf.byteLength - 4; i++) {
-            if (tailView.getUint32(i) !== 0x6D6F6F76) continue; // 'moov'
-            const sz = tailView.getUint32(i - 4);
-            if (sz < 8 || sz > fileSize) continue;
-            moovFileOffset = tailStart + i - 4;
-            moovSize = sz;
-            break;
+            // 扫描 'moov' 签名
+            const tailView = new DataView(tailBuf);
+            for (let i = 4; i <= tailBuf.byteLength - 4; i++) {
+                if (tailView.getUint32(i) !== 0x6D6F6F76) continue;
+                const sz = tailView.getUint32(i - 4);
+                if (sz < 8 || sz > fileSize) continue;
+                const moovFileOffset = tailStart + i - 4;
+                const moovSize = sz;
+                log(`moov: offset=${moovFileOffset}, size=${(moovSize / 1024 / 1024).toFixed(1)}MB`);
+
+                // 精确拉取完整 moov
+                const exactMoov = await rangeFetch(videoUrl, moovFileOffset, Math.min(moovFileOffset + moovSize, fileSize) - 1);
+                if (!exactMoov) break;
+                moovBuf = exactMoov;
+                moovAtTail = true;
+                log(`moov 拉取完成: ${(moovBuf.byteLength / 1024).toFixed(1)}KB`);
+                break;
+            }
         }
-        if (moovFileOffset < 0) { log('尾部未找到 moov，放弃'); return null; }
-        moovAtTail = true;
-        log(`moov: offset=${moovFileOffset}, size=${(moovSize / 1024 / 1024).toFixed(1)}MB`);
-
-        // 精确拉取完整 moov
-        const moovEnd = Math.min(moovFileOffset + moovSize, fileSize);
-        log(`精确拉取 moov ${moovFileOffset}-${moovEnd - 1}`);
-        const exactMoov = await rangeFetch(videoUrl, moovFileOffset, moovEnd - 1);
-        if (!exactMoov) { log('拉取 moov 失败'); return null; }
-        moovBuf = exactMoov;
-        log(`moov 拉取完成: ${(moovBuf.byteLength / 1024).toFixed(1)}KB`);
+        if (!moovBuf) { log('1MB/2MB/4MB 头尾均未找到 moov，放弃'); return null; }
     } else {
         log('头部找到 moov');
     }
@@ -115,39 +122,56 @@ export async function generateVideoThumbnail(
 
 // ── 辅助函数 ──
 
-/** 带 Range 的 fetch，只接受 206 Partial Content，否则返回 null */
+/** 带 Range 的 fetch */
 async function rangeFetch(
     url: string, start: number, end: number,
 ): Promise<ArrayBuffer | null> {
     try {
+        const expected = end - start + 1;
         const resp = await fetch(url, {
             headers: { Range: `bytes=${start}-${end}` },
         });
-        // 服务器必须返回 206 Partial Content，否则说明不支持 Range 请求
         if (resp.status !== 206) return null;
-        return await resp.arrayBuffer();
+        const buf = await resp.arrayBuffer();
+        // 验证返回数据大小符合预期，排除服务器返回 206 但响应体异常的 bug
+        if (buf.byteLength < expected) return null;
+        return buf;
     } catch {
         return null;
     }
 }
 
-/** HEAD 请求获取文件总大小 */
+/** 获取文件总大小，同时尝试 Range + HEAD 两种方式 */
 async function getFileSize(url: string): Promise<number | null> {
     try {
-        // 先尝试 Range 请求一个字节，从 Content-Range 拿到总大小
-        const resp = await fetch(url, {
-            headers: { Range: 'bytes=0-0' },
-        });
-        if (resp.status === 206) {
-            const cr = resp.headers.get('Content-Range');
+        // 方式 1：Range 请求前 1KB，从 Content-Range 读取总大小
+        const r1 = await fetch(url, { headers: { Range: 'bytes=0-1023' } });
+        createLogger('thumb')(`Range 响应: status=${r1.status}`);
+        if (r1.status === 206) {
+            const cr = r1.headers.get('Content-Range');
+            const cl1 = r1.headers.get('Content-Length');
+            createLogger('thumb')(`  Content-Range: ${cr}, Content-Length: ${cl1}`);
             if (cr) {
                 const size = parseInt(cr.split('/')[1], 10);
-                if (!isNaN(size)) return size;
+                if (size > 1024) return size; // 有效大小应远大于 Range 请求量
             }
+            // 有 Content-Length 也可作为兜底
+            const cl = parseInt(cl1 || '', 10);
+            if (cl > 1024) return cl;
         }
-        // fallback: Content-Length
-        const cl = parseInt(resp.headers.get('Content-Length') || '', 10);
-        return isNaN(cl) ? null : cl;
+
+        // 方式 2：HEAD 请求获取 Content-Length
+        const r2 = await fetch(url, { method: 'HEAD' });
+        createLogger('thumb')(`HEAD 响应: status=${r2.status}`);
+        if (r2.ok) {
+            const cl2 = r2.headers.get('Content-Length');
+            createLogger('thumb')(`  Content-Length: ${cl2}`);
+            const cl = parseInt(cl2 || '', 10);
+            if (cl > 0) return cl;
+        }
+
+        createLogger('thumb')(`无法获取文件大小: range=${r1.status} head=${r2.status}`);
+        return null;
     } catch {
         return null;
     }
@@ -267,7 +291,7 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             createLogger('thumb')(`首帧已就绪: ${video.videoWidth}x${video.videoHeight}`);
             clearTimeout(timer);
             const canvas = document.createElement('canvas');
-            const maxW = 200;
+            const maxW = 380;
             const scale = Math.min(1, maxW / (video.videoWidth || 1));
             canvas.width = Math.round((video.videoWidth || 1) * scale);
             canvas.height = Math.round((video.videoHeight || 1) * scale);
@@ -277,7 +301,7 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             canvas.toBlob((blob) => {
                 createLogger('thumb')('canvas 绘制完成');
                 finish(blob);
-            }, 'image/webp', 0.7);
+            }, 'image/webp', 0.5);
         };
 
         video.onerror = () => {
