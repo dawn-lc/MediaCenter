@@ -1,49 +1,52 @@
-# MediaCenter 流媒体服务器
+# MediaCenter
 
-基于 **Node.js + Express + React + Drizzle ORM + PostgreSQL** 的全栈流媒体中心，支持视频/音频流式传输、图片预览、媒体资源管理、标签系统、作者管理、用户认证和角色权限控制。
-
-## 许可证
-
-本软件采用 **PolyForm Noncommercial License 1.0.0** 发布。
-
-- **非商业使用**（个人学习、研究、娱乐、教育机构等）—— 完全免费
-- **商业使用**（SaaS 服务、企业内部系统、付费分发等）—— 需获得商业授权
-
-详见 [LICENSE](./LICENSE) 和 [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md)。
+Node.js + Express + React + PostgreSQL 全栈流媒体服务器。
 
 ## 快速开始
 
 ### 前置条件
 
-- **Node.js** >= 24
-- **PostgreSQL** >= 16
+- Node.js >= 24
+- PostgreSQL >= 16
 
-### 1. 配置环境变量
+### 配置
 
-创建 `.env` 文件：
+创建 `.env`：
 
 ```env
 JWT_SECRET=your-random-secret-here
 DATABASE_URL=postgres://user:password@localhost:5432/mediacenter
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-admin-password
+UPLOAD_DIR=./uploads
 ```
 
-### 2. 安装依赖
+所有环境变量：
+
+| 变量             | 说明                                              | 默认     |
+| ---------------- | ------------------------------------------------- | -------- |
+| `JWT_SECRET`     | JWT 签名密钥                                      | **必填** |
+| `DATABASE_URL`   | PostgreSQL 连接字符串                             | **必填** |
+| `ADMIN_USERNAME` | 管理员用户名                                      | **必填** |
+| `ADMIN_PASSWORD` | 管理员密码                                        | **必填** |
+| `UPLOAD_DIR`     | 上传目录                                          | **必填** |
+| `PORT`           | HTTP 端口                                         | `3000`   |
+| `SSL_CERT`       | SSL 证书路径（与 `SSL_KEY` 同时设置时启用 HTTPS） | 可选     |
+| `SSL_KEY`        | SSL 私钥路径                                      | 可选     |
+| `SSL_PORT`       | HTTPS 端口                                        | `443`    |
+| `API_TOKEN`      | 静态 API 令牌                                     | 可选     |
+
+### 启动
 
 ```bash
 npm install && cd client && npm install && cd ..
+npm run build
+npm start
 ```
 
-### 3. 启动
+访问 `http://localhost:3000`
 
-```bash
-npm run start
-```
-
-访问 **http://localhost:3000**
-
-## 开发
+### 开发
 
 ```bash
 npm run dev
@@ -65,3 +68,17 @@ npm run dev
 docker build -t mediacenter .
 docker run -d --name mediacenter -p 3000:3000 --env-file .env mediacenter
 ```
+
+HTTPS 模式（不启动 HTTP）：
+
+```bash
+docker run -d --name mediacenter -p 443:443 \
+  -v /certs:/certs:ro \
+  -e SSL_CERT=/certs/fullchain.pem \
+  -e SSL_KEY=/certs/privkey.pem \
+  --env-file .env mediacenter
+```
+
+## 许可证
+
+[PolyForm Noncommercial 1.0.0](./LICENSE) — 个人/教育免费，商业使用需授权。

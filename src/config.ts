@@ -34,6 +34,13 @@ if (!process.env.ADMIN_PASSWORD) {
     });
 }
 
+if (!process.env.UPLOAD_DIR) {
+    requiredVars.push({
+        key: 'UPLOAD_DIR',
+        hint: '媒体文件上传目录，例：./uploads'
+    });
+}
+
 if (requiredVars.length > 0) {
     console.error('[Config] 启动失败：缺少必需的环境变量');
     console.error('[Config] 请创建 .env 文件并配置以下变量：');
@@ -43,13 +50,21 @@ if (requiredVars.length > 0) {
     process.exit(1);
 }
 
+// 是否启用 HTTPS（当 SSL_CERT 和 SSL_KEY 同时设置时）
+const sslEnabled = !!(process.env.SSL_CERT && process.env.SSL_KEY);
+
 const config = {
-    port: parseInt(process.env.PORT || '3000', 10),
+    port: parseInt(process.env.PORT || (sslEnabled ? '80' : '3000'), 10),
+    sslPort: parseInt(process.env.SSL_PORT || '443', 10),
+    sslCert: process.env.SSL_CERT,          // SSL 证书路径，可选
+    sslKey: process.env.SSL_KEY,            // SSL 私钥路径，可选
+    sslEnabled,                             // 是否启用 HTTPS
+
     jwtSecret: process.env.JWT_SECRET!,
     jwtExpiresIn: '7d' as const,
     apiToken: process.env.API_TOKEN, // 静态 API 令牌，不设置则禁用
     databaseUrl: process.env.DATABASE_URL!,
-    uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR || './uploads'),
+    uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR!),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '34359738368', 10), // 32GB
 
     // 支持的媒体类型

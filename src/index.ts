@@ -1,4 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
+import http from 'http';
+import https from 'https';
+import { readFileSync, watchFile } from 'fs';
 import cors from 'cors';
 import { join, resolve } from 'path';
 import config from './config';
@@ -165,32 +168,92 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 // 优雅关闭
+/** 所有活跃的服务器实例，供优雅关闭使用 */
+const activeServers: (http.Server | https.Server)[] = [];
+
 async function gracefulShutdown(signal: string) {
     console.log(`\n[Server] 收到 ${signal}，正在关闭...`);
+    await Promise.allSettled(activeServers.map(s => new Promise<void>((resolve, reject) => {
+        s.close((err) => (err ? reject(err) : resolve()));
+    })));
     await closeDatabase();
     process.exit(0);
 }
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// 启动服务器（先 listen，初始化期间处于维护模式）
-const server = app.listen(config.port, async () => {
-    console.log(`[Server] 启动于 http://localhost:${config.port}`);
-    console.log('[Server] 正在初始化数据库...');
+// ── 启动服务器 ──
 
+/** 创建服务器实例并绑定到端口 */
+function startServer(
+    server: http.Server | https.Server,
+    port: number,
+    protocol: string,
+): void {
+    server.listen(port, () => {
+        console.log(`[Server] 监听于 ${protocol}://0.0.0.0:${port}`);
+    });
+    server.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`[Fatal] 端口 ${port} 已被占用`);
+        } else {
+            console.error('[Fatal] 服务器启动失败:', err.message);
+        }
+        process.exit(1);
+    });
+}
+
+/** 初始化回调（数据库、上传目录等） */
+async function onServerReady() {
+    console.log('[Server] 正在初始化数据库...');
     ensureUploadDir();
     await initDatabase();
     await ensureDefaultUsers();
-
     app.set('maintenance', false);
     console.log('[Server] 数据库就绪，服务已开通');
-});
+}
 
-server.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') {
-        console.error(`[Fatal] 端口 ${config.port} 已被占用`);
-    } else {
-        console.error('[Fatal] 服务器启动失败:', err.message);
+if (config.sslEnabled) {
+    // ── HTTPS 模式（仅监听 HTTPS，不启动 HTTP） ──
+
+    /** 读取证书文件，失败时退出进程（仅在启动时调用） */
+    function loadSSLCredentials(): { cert: Buffer; key: Buffer } {
+        try {
+            return {
+                cert: readFileSync(config.sslCert!),
+                key: readFileSync(config.sslKey!),
+            };
+        } catch (err) {
+            console.error('[Fatal] 读取 SSL 证书失败:', (err as Error).message);
+            process.exit(1);
+        }
     }
-    process.exit(1);
-});
+
+    const httpsServer = https.createServer(loadSSLCredentials(), app);
+    startServer(httpsServer, config.sslPort, 'https');
+    activeServers.push(httpsServer);
+
+    // 监听证书文件变化，热重载 TLS 上下文
+    for (const file of [config.sslCert!, config.sslKey!]) {
+        watchFile(file, { interval: 86_400_000 }, (curr, prev) => {
+            if (curr.mtime <= prev.mtime) return;
+            try {
+                httpsServer.setSecureContext({
+                    cert: readFileSync(config.sslCert!),
+                    key: readFileSync(config.sslKey!),
+                });
+                console.log(`[Server] SSL 证书已热重载 (${file})`);
+            } catch (err) {
+                console.error(`[Server] SSL 证书热重载失败，保留旧证书:`, (err as Error).message);
+            }
+        });
+    }
+
+    httpsServer.once('listening', onServerReady);
+} else {
+    // ── HTTP 模式 ──
+    const server = http.createServer(app);
+    startServer(server, config.port, 'http');
+    activeServers.push(server);
+    server.once('listening', onServerReady);
+}
