@@ -156,10 +156,12 @@ function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
     const hdlr = findAtom(trakData, 'hdlr');
     if (!hdlr) return null;
     const hdlrDv = new DataView(hdlr);
-    // hdlr: version(1) + flags(3) + preDefined(4) + handlerType(4B ASCII)
+    // hdlr atom 结构（含头部 8B）:
+    //   0-3: size, 4-7: 'hdlr', 8: version, 9-11: flags
+    //   12-15: preDefined, 16-19: handlerType
     const handlerType = String.fromCharCode(
-        hdlrDv.getUint8(12), hdlrDv.getUint8(13),
-        hdlrDv.getUint8(14), hdlrDv.getUint8(15),
+        hdlrDv.getUint8(16), hdlrDv.getUint8(17),
+        hdlrDv.getUint8(18), hdlrDv.getUint8(19),
     );
     if (handlerType !== 'vide') return null;
 
