@@ -27,7 +27,7 @@ export function deleteFile(filePath: string): void {
             unlinkSync(filePath);
         }
     } catch (err) {
-        console.error(`[Storage] 删除文件失败: ${filePath}`, err instanceof Error ? err.message : err);
+        console.error('[Storage] 删除文件失败: %s, err: %s', filePath, err instanceof Error ? err.message : String(err));
     }
 }
 
