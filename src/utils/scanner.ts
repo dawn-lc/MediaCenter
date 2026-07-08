@@ -36,7 +36,7 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
         errorDetails: []
     };
 
-    console.log(`[Scan] 开始扫描目录: ${dirPath}`);
+    console.log('[Scan] 开始扫描目录: %s', dirPath);
 
     // 1. 收集所有媒体文件（异步，不阻塞）
     const mediaFiles = await collectMediaFiles(dirPath, recursive);
@@ -149,7 +149,7 @@ async function collectMediaFiles(dirPath: string, recursive: boolean): Promise<M
             }
         }
     } catch (err) {
-        console.error(`[Scan] 读取目录失败: ${dirPath}`, err instanceof Error ? err.message : err);
+        console.error('[Scan] 读取目录失败: %s', dirPath, err instanceof Error ? err.message : err);
     }
 
     return results;
