@@ -111,6 +111,11 @@ app.use(
 );
 
 // SPA fallback：非 API / 非静态文件 / 非 SW → 返回 index.html
+// 先对非 API 页面请求限流，避免高并发触发 sendFile 造成 I/O 压力
+app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api/')) return next();
+    return strictLimiter(req, res, next);
+});
 app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api/')) return next();
     // 有扩展名的静态文件直接跳过（由前面的 express.static 处理）
