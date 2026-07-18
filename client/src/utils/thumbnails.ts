@@ -281,6 +281,8 @@ function fixStco(
     const dataEnd = originalOffset + dataSize;
 
     function walk(start: number, end: number) {
+        // 防止异常 size 导致递归 end 超出 DataView 边界
+        end = Math.min(end, dv.byteLength);
         let pos = start;
         while (pos + 8 <= end) {
             const size = dv.getUint32(pos);

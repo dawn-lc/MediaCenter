@@ -2,7 +2,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
-
+import fs from 'fs';
+// 从项目根目录加载 .env
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ path: resolve(__dirname, '..', '.env') });
 export default defineConfig({
     plugins: [
         react(),
@@ -130,11 +133,17 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        https: {
+            key: fs.readFileSync(process.env.SSL_KEY!),
+            cert: fs.readFileSync(process.env.SSL_CERT!),
+        },
         proxy: {
             '/api': {
-                target: 'http://localhost:3000',
+                target: `https://127.0.0.1${process.env.PORT ? `:${process.env.PORT}` : ""}`,
                 changeOrigin: true,
+                secure: false,
             },
         },
+        host: true
     },
 });

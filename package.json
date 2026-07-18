@@ -4,7 +4,7 @@
   "description": "HTTP流媒体服务器 - TypeScript + Drizzle ORM + PostgreSQL",
   "type": "module",
   "scripts": {
-    "start": "npm run build && node dist/index.js",
+    "start": "npm run build && cd dist && node --env-file=../.env index.js",
     "build": "npm run server:build && npm run client:build",
     "dev": "concurrently --raw \"npm run server:dev\" \"npm run client:dev\"",
     "client:dev": "cd client && npx vite",

@@ -1,4 +1,4 @@
-import { pgTable, text, integer, doublePrecision, timestamp, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, doublePrecision, timestamp, uuid, uniqueIndex, index, bigint } from 'drizzle-orm/pg-core';
 
 // ===== users 表 =====
 export const users = pgTable(
@@ -25,7 +25,7 @@ export const media = pgTable(
         fileName: text('file_name').notNull(),
         filePath: text('file_path').notNull(),
         fileHash: text('file_hash'),
-        fileSize: integer('file_size').notNull().default(0),
+        fileSize: bigint('file_size', { mode: 'number' }).notNull().default(0),
         mimeType: text('mime_type').notNull().default('application/octet-stream'),
         minRole: text('min_role').notNull().default('guest'),
         duration: doublePrecision('duration'),

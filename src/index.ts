@@ -75,6 +75,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 
 // SPA 静态文件服务
 const publicDir = resolve(process.cwd(), 'public');
+
 // 1. 带 hash 的构建资源 → 强缓存（immutable）
 app.use(
     '/assets',
