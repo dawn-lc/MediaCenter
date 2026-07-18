@@ -6,6 +6,7 @@ import fs from 'fs';
 // 从项目根目录加载 .env
 import { config as dotenvConfig } from 'dotenv';
 dotenvConfig({ path: resolve(__dirname, '..', '.env') });
+
 export default defineConfig({
     plugins: [
         react(),
@@ -133,10 +134,12 @@ export default defineConfig({
     },
     server: {
         port: 5173,
-        https: {
-            key: fs.readFileSync(process.env.SSL_KEY!),
-            cert: fs.readFileSync(process.env.SSL_CERT!),
-        },
+        https: process.env.SSL_KEY && process.env.SSL_CERT
+            ? {
+                key: fs.readFileSync(process.env.SSL_KEY),
+                cert: fs.readFileSync(process.env.SSL_CERT),
+            }
+            : undefined,
         proxy: {
             '/api': {
                 target: `https://127.0.0.1${process.env.PORT ? `:${process.env.PORT}` : ""}`,
