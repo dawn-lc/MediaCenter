@@ -466,14 +466,14 @@ export async function cacheThumbnail(mediaId: string, blob: Blob): Promise<void>
     }
 }
 
-/** 从缓存中获取缩略图，返回对象 URL（调用者需在适当时机 revoke） */
+/** 从缓存中获取缩略图，返回 SW 缓存路由 URL（由 SW 直接响应，无 blob 生命周期问题） */
 export async function getCachedThumbnailUrl(mediaId: string): Promise<string | null> {
     try {
         const cache = await caches.open(THUMB_CACHE);
         const response = await cache.match(cacheKey(mediaId));
         if (!response) return null;
-        const blob = await response.blob();
-        return URL.createObjectURL(blob);
+        // 返回 SW 路由 URL——SW 会从 Cache 直接响应，无需 blob
+        return cacheKey(mediaId);
     } catch {
         return null;
     }
@@ -481,13 +481,13 @@ export async function getCachedThumbnailUrl(mediaId: string): Promise<string | n
 
 /**
  * 一键：获取已缓存的缩略图，若不存在则生成并缓存
- * @returns 对象 URL 或 null
+ * @returns SW 缓存路由 URL（/thumb/client/<mediaId>）或 null
  */
 export async function obtainThumbnailUrl(
     mediaId: string,
     videoUrl: string,
 ): Promise<string | null> {
-    // 1. 尝试缓存（后续直接从 SW 读取，无需网络）
+    // 1. 尝试缓存
     const cached = await getCachedThumbnailUrl(mediaId);
     if (cached) return cached;
 
@@ -495,9 +495,9 @@ export async function obtainThumbnailUrl(
     const blob = await generateVideoThumbnail(videoUrl);
     if (!blob) return null;
 
-    // 3. 写入 SW 缓存（下次直接由 SW 响应，不经过网络）
+    // 3. 写入 SW 缓存
     await cacheThumbnail(mediaId, blob);
 
-    // 4. 直接使用生成的 blob 创建 URL，避免从缓存重新读取
-    return URL.createObjectURL(blob);
+    // 4. 返回 SW 路由 URL——SW 从缓存响应，URL 永久有效
+    return cacheKey(mediaId);
 }

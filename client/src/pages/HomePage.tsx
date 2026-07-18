@@ -63,7 +63,6 @@ export default function HomePage() {
     const [loading, setLoading] = useState(true);
     const [generatedThumbs, setGeneratedThumbs] = useState<Record<string, string>>({});
     const generatedRef = useRef<Set<string>>(new Set());
-    const thumbUrlsRef = useRef<string[]>([]);
     const saved = loadState();
     // URL 参数优先于 localStorage（支持前进后退、外部链接）
     const [page, setPage] = useState(parseInt(searchParams.get('page') || '') || saved.page || 1);
@@ -125,24 +124,18 @@ export default function HomePage() {
         for (const item of todo) generatedRef.current.add(item.id);
 
         let cancelled = false;
-        const urls: string[] = [];
         (async () => {
             for (const item of todo) {
                 if (cancelled) break;
                 const url = await obtainThumbnailUrl(item.id, resolveApiUrl(item.streamUrl));
-                if (cancelled) { if (url) URL.revokeObjectURL(url); break; }
+                if (cancelled) break;
                 if (url) {
-                    urls.push(url);
-                    thumbUrlsRef.current.push(url);
                     setGeneratedThumbs((prev) => ({ ...prev, [item.id]: url }));
                 }
             }
         })();
 
-        return () => {
-            cancelled = true;
-            for (const url of urls) URL.revokeObjectURL(url);
-        };
+        return () => { cancelled = true; };
     }, [items]);
 
     // 持久化搜索/筛选/排序状态到 localStorage
