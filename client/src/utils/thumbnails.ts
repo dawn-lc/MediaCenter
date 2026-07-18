@@ -8,7 +8,7 @@ import { findAtom, findAtomScan, parseFirstVideoFrame, getVideoStbl, buildSample
 import { createLogger } from './log';
 
 const THUMB_CACHE = 'thumbnails';
-const THUMB_PREFIX = '/thumb/client/';
+const THUMB_PREFIX = '/thumb?id=';
 const HEAD_SIZE = 1_048_576;  // 拉取文件头部 1MB（覆盖 ~90% 的头部位 moov）
 const TAIL_SIZE = 1_048_576;  // moov 在尾部时拉取尾部 1MB
 
@@ -445,7 +445,7 @@ function decodeFrame(blob: Blob, seekTime?: number): Promise<Blob | null> {
 
 // ── 缓存操作 ──
 
-/** 缓存键：/thumb/client/<mediaId> */
+/** 缓存键 & SW 路由：/thumb?client=<mediaId> */
 function cacheKey(mediaId: string): string {
     return `${THUMB_PREFIX}${mediaId}`;
 }
@@ -481,7 +481,7 @@ export async function getCachedThumbnailUrl(mediaId: string): Promise<string | n
 
 /**
  * 一键：获取已缓存的缩略图，若不存在则生成并缓存
- * @returns SW 缓存路由 URL（/thumb/client/<mediaId>）或 null
+ * @returns SW 缓存路由 URL（/thumb?id=<mediaId>）或 null
  */
 export async function obtainThumbnailUrl(
     mediaId: string,
