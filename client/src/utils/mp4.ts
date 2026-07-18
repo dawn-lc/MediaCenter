@@ -219,6 +219,166 @@ function trimAtomHeader(atom: ArrayBuffer): ArrayBuffer {
     return atom.byteLength > 8 ? atom.slice(8) : atom;
 }
 
+// ── 样本索引（用于按时间定位帧数据的字节偏移）──
+
+/** 从完整 moov 中提取视频轨道的 stbl 数据（已去除 stbl 自身头部） */
+export function getVideoStbl(moovBuffer: ArrayBuffer): ArrayBuffer | null {
+    let pos = 8;
+    while (pos + 8 <= moovBuffer.byteLength) {
+        const h = readAtomHeader(moovBuffer, pos);
+        if (!h) break;
+        if (h.type === 'trak') {
+            const trakData = moovBuffer.slice(h.dataStart, h.dataEnd);
+            const stbl = extractVideoStbl(trakData);
+            if (stbl) return stbl;
+        }
+        pos = h.dataEnd;
+    }
+    return null;
+}
+
+/** 视频样本索引，用于根据样本号定位原始文件中的字节偏移 */
+export interface SampleIndex {
+    chunkOffsets: number[];    // chunkOffsets[c] = 第 c 个 chunk 的文件字节偏移
+    sampleSizes: number[];     // sampleSizes[s] = 第 s 个 sample 的字节大小
+    stsc: { firstChunk: number; samplesPerChunk: number }[];
+    totalSamples: number;
+}
+
+/** 从 stbl 数据构建样本索引 */
+export function buildSampleIndex(stblData: ArrayBuffer): SampleIndex | null {
+    const log = createLogger('mp4');
+    let stco: ArrayBuffer | null = null;
+    let co64: ArrayBuffer | null = null;
+    let stsz: ArrayBuffer | null = null;
+    let stsc: ArrayBuffer | null = null;
+
+    let pos = 0;
+    while (pos + 8 <= stblData.byteLength) {
+        const h = readAtomHeader(stblData, pos);
+        if (!h) break;
+        if (h.type === 'stco') stco = stblData.slice(pos, h.dataEnd);
+        else if (h.type === 'co64') co64 = stblData.slice(pos, h.dataEnd);
+        else if (h.type === 'stsz') stsz = stblData.slice(pos, h.dataEnd);
+        else if (h.type === 'stsc') stsc = stblData.slice(pos, h.dataEnd);
+        pos = h.dataEnd;
+    }
+
+    const offsetTable = co64 || stco;
+    if (!offsetTable || !stsz) { log('缺少 stco/co64 或 stsz'); return null; }
+    const isCo64 = co64 !== null;
+
+    // 解析 chunk 偏移表
+    const offDv = new DataView(offsetTable);
+    const chunkCount = offDv.getUint32(12);
+    const chunkOffsets: number[] = [];
+    const entrySize = isCo64 ? 8 : 4;
+    for (let i = 0; i < chunkCount; i++) {
+        const off = 16 + i * entrySize;
+        chunkOffsets.push(isCo64 ? Number(offDv.getBigUint64(off)) : offDv.getUint32(off));
+    }
+
+    // 解析 sample 大小表
+    const stszDv = new DataView(stsz);
+    const uniformSize = stszDv.getUint32(12);
+    const totalSamples = stszDv.getUint32(16);
+    const sampleSizes: number[] = [];
+    if (uniformSize > 0) {
+        for (let i = 0; i < totalSamples; i++) sampleSizes.push(uniformSize);
+    } else {
+        for (let i = 0; i < totalSamples; i++) sampleSizes.push(stszDv.getUint32(20 + i * 4));
+    }
+
+    // 解析 stsc
+    const stscEntries: { firstChunk: number; samplesPerChunk: number }[] = [];
+    if (stsc) {
+        const stscDv = new DataView(stsc);
+        const stscCount = stscDv.getUint32(12);
+        for (let i = 0; i < stscCount; i++) {
+            const off = 16 + i * 12;
+            stscEntries.push({
+                firstChunk: stscDv.getUint32(off),
+                samplesPerChunk: stscDv.getUint32(off + 4),
+            });
+        }
+    } else {
+        // 无 stsc 时默认每 chunk 1 个 sample
+        stscEntries.push({ firstChunk: 1, samplesPerChunk: 1 });
+    }
+
+    return { chunkOffsets, sampleSizes, stsc: stscEntries, totalSamples };
+}
+
+/** 根据样本号获取其在原始文件中的字节偏移（若超出范围返回 null） */
+export function getSampleByteOffset(index: SampleIndex, sampleNum: number): number | null {
+    if (sampleNum < 0 || sampleNum >= index.totalSamples) return null;
+
+    const { stsc, chunkOffsets, sampleSizes } = index;
+    let sampleCursor = 0;
+
+    for (let c = 0; c < chunkOffsets.length; c++) {
+        const chunkNum = c + 1; // MP4 chunk 编号从 1 开始
+        // 查找本 chunk 对应的 samplesPerChunk
+        let spc = stsc[0].samplesPerChunk;
+        for (const entry of stsc) {
+            if (entry.firstChunk <= chunkNum) spc = entry.samplesPerChunk;
+        }
+
+        if (sampleNum < sampleCursor + spc) {
+            // 目标样本在本 chunk 内
+            let intraOffset = 0;
+            for (let s = sampleCursor; s < sampleNum; s++) {
+                intraOffset += sampleSizes[s] || 0;
+            }
+            return chunkOffsets[c] + intraOffset;
+        }
+        sampleCursor += spc;
+    }
+
+    return null;
+}
+
+/** 计算覆盖样本 0 → targetSample 所需的精确字节范围
+ *
+ *  遍历所有 chunk 从 0 到包含 targetSample 的 chunk，
+ *  取最大 (chunkOffset + chunkDataSize) 作为 requiredEnd，
+ *  确保所有中间 chunk 均完整包含在内。 */
+export function getByteRangeForSamples(
+    index: SampleIndex,
+    targetSample: number,
+): { offset: number; size: number } | null {
+    if (targetSample < 0 || targetSample >= index.totalSamples) return null;
+
+    const { stsc, chunkOffsets, sampleSizes } = index;
+    const firstOffset = chunkOffsets[0];
+    let sampleCursor = 0;
+    let maxEnd = 0;
+
+    for (let c = 0; c < chunkOffsets.length; c++) {
+        const chunkNum = c + 1;
+        let spc = stsc[0].samplesPerChunk;
+        for (const entry of stsc) {
+            if (entry.firstChunk <= chunkNum) spc = entry.samplesPerChunk;
+        }
+
+        // 统计本 chunk 数据总大小
+        let chunkDataSize = 0;
+        for (let s = sampleCursor; s < sampleCursor + spc && s < sampleSizes.length; s++) {
+            chunkDataSize += sampleSizes[s] || 0;
+        }
+        const chunkEnd = chunkOffsets[c] + chunkDataSize;
+        if (chunkEnd > maxEnd) maxEnd = chunkEnd;
+
+        if (targetSample < sampleCursor + spc) {
+            // 已覆盖到目标样本所在 chunk，返回累积的最大范围
+            return { offset: firstOffset, size: maxEnd - firstOffset };
+        }
+        sampleCursor += spc;
+    }
+
+    return null;
+}
+
 // ── 公开 API ──
 
 /** 从 moov atom 的完整数据中解析首个视频帧的字节偏移和大小 */

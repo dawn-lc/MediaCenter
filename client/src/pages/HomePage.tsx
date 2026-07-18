@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Api, resolveApiUrl } from '../api';
 import type { Media } from '../types';
@@ -12,6 +12,8 @@ import TagList from '../components/TagList';
 import Pagination from '../components/Pagination';
 import LoadingState from '../components/LoadingState';
 import EmptyState from '../components/EmptyState';
+
+import { useScrollRestore } from '../hooks/useScrollRestore';
 
 import { HOME_PAGE_SIZE, TOAST_DURATION, DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER, STORAGE_PREFIX } from '../config';
 
@@ -51,10 +53,11 @@ function saveState(state: Partial<HomeState>): void {
 
 export default function HomePage() {
     const navigate = useNavigate();
-    const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { t } = useTranslation();
     const auth = useAuthStore();
     const playlist = usePlaylistStore();
+    const { saveNow: saveScroll } = useScrollRestore();
 
     const [items, setItems] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,21 +65,24 @@ export default function HomePage() {
     const generatedRef = useRef<Set<string>>(new Set());
     const thumbUrlsRef = useRef<string[]>([]);
     const saved = loadState();
-    const [page, setPage] = useState(saved.page || 1);
+    // URL 参数优先于 localStorage（支持前进后退、外部链接）
+    const [page, setPage] = useState(parseInt(searchParams.get('page') || '') || saved.page || 1);
     const [totalPages, setTotalPages] = useState(1);
     const [search, setSearch] = useState(saved.search || '');
-    const [committedSearch, setCommittedSearch] = useState(saved.committedSearch || '');
-    const [typeFilter, setTypeFilter] = useState(saved.typeFilter || '');
-    const initExpr = new URLSearchParams(location.search).get('tags') || saved.tagExpr || '';
+    const [committedSearch, setCommittedSearch] = useState(searchParams.get('search') || saved.committedSearch || '');
+    const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || saved.typeFilter || '');
+    const initExpr = searchParams.get('tags') || saved.tagExpr || '';
     const [tagExpr, setTagExpr] = useState(initExpr);
     const [tagInput, setTagInput] = useState(saved.tagInput || initExpr);
-    const initAuthorExpr = new URLSearchParams(location.search).get('authorExpr') || saved.authorExpr || '';
+    const initAuthorExpr = searchParams.get('authorExpr') || saved.authorExpr || '';
     const [authorExpr, setAuthorExpr] = useState(initAuthorExpr);
     const [authorInput, setAuthorInput] = useState(saved.authorInput || initAuthorExpr);
-    const initUploaderId = new URLSearchParams(location.search).get('uploaderId') || saved.uploaderId || '';
+    const initUploaderId = searchParams.get('uploaderId') || saved.uploaderId || '';
     const [uploaderId, setUploaderId] = useState(initUploaderId);
-    const [sortBy, setSortBy] = useState(saved.sortBy || DEFAULT_SORT_FIELD);
-    const [sortOrder, setSortOrder] = useState(saved.sortOrder || DEFAULT_SORT_ORDER);
+    const initSortRaw = searchParams.get('sort') || '';
+    const initSortParts = initSortRaw ? initSortRaw.split(':') : [];
+    const [sortBy, setSortBy] = useState(initSortParts[0] || saved.sortBy || DEFAULT_SORT_FIELD);
+    const [sortOrder, setSortOrder] = useState(initSortParts[1] || saved.sortOrder || DEFAULT_SORT_ORDER);
     const [sortExplicit, setSortExplicit] = useState(false); // 用户是否主动点过排序
 
     // 解析标签表达式分组，用于高亮不同筛选项
@@ -156,38 +162,22 @@ export default function HomePage() {
         });
     }, [search, committedSearch, typeFilter, tagExpr, tagInput, authorExpr, authorInput, uploaderId, sortBy, sortOrder, page]);
 
-    // 同步筛选条件到 URL
+    // 同步状态 → URL（使用 React Router 的 setSearchParams，原子操作无竞态）
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (tagExpr) params.set('tags', tagExpr);
-        else params.delete('tags');
-        if (authorExpr) params.set('authorExpr', authorExpr);
-        else params.delete('authorExpr');
-        if (uploaderId) params.set('uploaderId', uploaderId);
-        else params.delete('uploaderId');
-        const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-        window.history.replaceState(null, '', newUrl);
-    }, [tagExpr, authorExpr, uploaderId]);
-
-    // 从 URL 同步筛选条件（当从卡片/播放器点击跳转时）
-    useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const urlTags = params.get('tags') || '';
-        const urlAuthorExpr = params.get('authorExpr') || '';
-        const urlUploaderId = params.get('uploaderId') || '';
-        if (urlTags !== tagExpr) {
-            setTagExpr(urlTags);
-            setTagInput(urlTags);
+        const next = new URLSearchParams(searchParams);
+        const setOrDel = (k: string, v: string) => v ? next.set(k, v) : next.delete(k);
+        setOrDel('tags', tagExpr);
+        setOrDel('authorExpr', authorExpr);
+        setOrDel('uploaderId', uploaderId);
+        setOrDel('search', committedSearch);
+        setOrDel('type', typeFilter);
+        setOrDel('sort', sortBy !== DEFAULT_SORT_FIELD || sortOrder !== DEFAULT_SORT_ORDER ? `${sortBy}:${sortOrder}` : '');
+        setOrDel('page', page > 1 ? String(page) : '');
+        // 仅当参数有变化时才更新，避免无限循环
+        if (next.toString() !== searchParams.toString()) {
+            setSearchParams(next, { replace: false });
         }
-        if (urlAuthorExpr !== authorExpr) {
-            setAuthorExpr(urlAuthorExpr);
-            setAuthorInput(urlAuthorExpr);
-        }
-        if (urlUploaderId !== uploaderId) {
-            setUploaderId(urlUploaderId);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.search]);
+    }, [tagExpr, authorExpr, uploaderId, committedSearch, typeFilter, sortBy, sortOrder, page]);
 
     const doSearch = () => {
         setPage(1);

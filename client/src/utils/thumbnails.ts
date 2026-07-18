@@ -4,7 +4,7 @@
 // Service Worker 的 thumbnails 缓存中供后续复用。
 // ---------------------------------------------------------------------------
 
-import { findAtom, findAtomScan, parseFirstVideoFrame } from './mp4';
+import { findAtom, findAtomScan, parseFirstVideoFrame, getVideoStbl, buildSampleIndex, getSampleByteOffset, getByteRangeForSamples } from './mp4';
 import { createLogger } from './log';
 
 const THUMB_CACHE = 'thumbnails';
@@ -12,15 +12,70 @@ const THUMB_PREFIX = '/thumb/client/';
 const HEAD_SIZE = 1_048_576;  // 拉取文件头部 1MB（覆盖 ~90% 的头部位 moov）
 const TAIL_SIZE = 1_048_576;  // moov 在尾部时拉取尾部 1MB
 
+/** 确保获取完整的 moov atom（头部不完整时精确重拉，头部无则尾部搜索） */
+async function getFullMoov(
+    videoUrl: string, headBuf: ArrayBuffer,
+): Promise<ArrayBuffer | null> {
+    const log = createLogger('thumb');
+    const MOOV_SIG = 0x6D6F6F76;
+
+    // 先在头部扫描 moov
+    const headDv = new DataView(headBuf);
+    for (let i = 4; i <= headBuf.byteLength - 4; i++) {
+        if (headDv.getUint32(i) !== MOOV_SIG) continue;
+        const sz = headDv.getUint32(i - 4);
+        if (sz < 8) continue;
+        const moovOffset = i - 4;
+        const slicedLen = Math.min(sz, headBuf.byteLength - moovOffset);
+        if (slicedLen >= sz) {
+            log(`头部 moov 完整 @ ${moovOffset}`);
+            return headBuf.slice(moovOffset, moovOffset + sz);
+        }
+        // 不完整，重新精确拉取
+        log(`头部 moov 不完整 (需 ${(sz / 1024).toFixed(0)}KB，仅 ${(slicedLen / 1024).toFixed(0)}KB)，重拉…`);
+        const exact = await rangeFetch(videoUrl, moovOffset, moovOffset + sz - 1);
+        if (exact) { log('moov 重拉完成'); return exact; }
+        break;
+    }
+
+    // 头部未找到 → 尾部搜索
+    log('头部未找到完整 moov，尝试尾部搜索…');
+    for (const tailSize of [TAIL_SIZE, TAIL_SIZE * 2, TAIL_SIZE * 4]) {
+        const fs = await getFileSize(videoUrl);
+        if (!fs) { log('获取文件大小失败'); return null; }
+        log(`文件总大小: ${(fs / 1024 / 1024).toFixed(1)}MB`);
+        const tailStart = Math.max(Math.floor(fs / 2), fs - tailSize);
+        if (tailStart >= fs) { log('文件太小'); break; }
+        log(`拉取尾部 ${tailStart}-${fs - 1}`);
+        const tailBuf = await rangeFetch(videoUrl, tailStart, fs - 1);
+        if (!tailBuf) { log('尾部拉取失败'); break; }
+
+        const tailDv = new DataView(tailBuf);
+        for (let i = 4; i <= tailBuf.byteLength - 4; i++) {
+            if (tailDv.getUint32(i) !== MOOV_SIG) continue;
+            const sz = tailDv.getUint32(i - 4);
+            if (sz < 8 || sz > fs) continue;
+            const moovFileOffset = tailStart + i - 4;
+            log(`moov: offset=${moovFileOffset}, size=${(sz / 1024 / 1024).toFixed(1)}MB`);
+            const exact = await rangeFetch(videoUrl, moovFileOffset, Math.min(moovFileOffset + sz, fs) - 1);
+            if (exact) { log('moov 拉取完成'); return exact; }
+            break;
+        }
+    }
+
+    log('头尾均未找到完整 moov');
+    return null;
+}
+
 /**
  * 生成视频缩略图，返回 Blob
  *
- * 策略：
- * ① 先拉文件头部 HEAD_SIZE → 若含 moov，从中解析首帧偏移 → 只拉首帧
- * ② 若 moov 不在头部 → HEAD 获取文件总大小 → 拉尾部 TAIL_SIZE → 找到 moov
- *     → 解析首帧偏移 → 只拉首帧
- * ③ 将 ftyp + moov（修正偏移）+ 首帧数据 + mdat 外壳拼装为合法微型 MP4
- * ④ 喂给 <video> 解码绘制
+ * 策略（流式按需拉取）：
+ * ① 拉文件头部 HEAD_SIZE → 确保获取完整 moov atom
+ * ② 从 moov 构建样本索引（stco/stsz/stsc）→ 可按帧号定位字节偏移
+ * ③ 拉首帧周边数据 → 拼装微型 MP4 → 解码 → 纯色检测
+ * ④ 若纯色：用样本索引定位 +30/+60/…帧的字节偏移，按需拉取 2MB 帧数据
+ *     → 重新拼装微型 MP4 → 解码 → 再检测，直至找到非纯色帧或耗尽重试
  */
 export async function generateVideoThumbnail(
     videoUrl: string,
@@ -28,96 +83,103 @@ export async function generateVideoThumbnail(
     const log = createLogger('thumb');
     log(`开始: ${videoUrl.slice(0, 80)}`);
 
-    // ── ① 拉取文件头部 ──
+    // ── ① 获取完整 moov ──
     log(`拉取头部 0-${HEAD_SIZE - 1}`);
     const headBuf = await rangeFetch(videoUrl, 0, HEAD_SIZE - 1);
     if (!headBuf) { log('头部拉取失败'); return null; }
     log(`头部拉取成功: ${(headBuf.byteLength / 1024).toFixed(1)}KB`);
 
-    let moovBuf: ArrayBuffer | null = findAtomScan(headBuf, 'moov');
-    let fileSize = 0;
-    let moovAtTail = false;
+    const moovBuf = await getFullMoov(videoUrl, headBuf);
+    if (!moovBuf) { log('无法获取完整 moov'); return null; }
+    log(`moov: ${(moovBuf.byteLength / 1024).toFixed(1)}KB`);
 
-    // ── ② 若头部无 moov，拉尾部（逐步放宽搜索范围至 4MB） ──
-    if (!moovBuf) {
-        for (const headSize of [HEAD_SIZE, HEAD_SIZE * 2, HEAD_SIZE * 4]) {
-            if (moovBuf) break;
-            if (headSize > HEAD_SIZE) {
-                log(`头部放宽至 ${headSize / 1024}KB`);
-                const buf = await rangeFetch(videoUrl, 0, headSize - 1);
-                if (!buf) break;
-                moovBuf = findAtomScan(buf, 'moov');
-                if (moovBuf) break;
-            }
+    // ── ② 构建样本索引 ──
+    const stbl = getVideoStbl(moovBuf);
+    if (!stbl) { log('无法获取视频 stbl'); return null; }
+    const index = buildSampleIndex(stbl);
+    if (!index) { log('无法构建样本索引'); return null; }
+    log(`样本索引: ${index.totalSamples} samples, ${index.chunkOffsets.length} chunks`);
 
-            // 尾部搜索
-            const fs = await getFileSize(videoUrl);
-            if (!fs) { log('获取文件大小失败'); return null; }
-            fileSize = fs;
-            log(`文件总大小: ${(fileSize / 1024 / 1024).toFixed(1)}MB`);
-            const tailSize = headSize;
-            const tailStart = Math.max(Math.floor(fileSize / 2), fileSize - tailSize);
-            if (tailStart >= fileSize) { log('文件太小，不适合尾部搜索'); break; }
-            log(`拉取尾部 ${tailStart}-${fileSize - 1}`);
-            const tailBuf = await rangeFetch(videoUrl, tailStart, fileSize - 1);
-            if (!tailBuf) { log('尾部拉取失败'); break; }
-
-            // 扫描 'moov' 签名
-            const tailView = new DataView(tailBuf);
-            for (let i = 4; i <= tailBuf.byteLength - 4; i++) {
-                if (tailView.getUint32(i) !== 0x6D6F6F76) continue;
-                const sz = tailView.getUint32(i - 4);
-                if (sz < 8 || sz > fileSize) continue;
-                const moovFileOffset = tailStart + i - 4;
-                const moovSize = sz;
-                log(`moov: offset=${moovFileOffset}, size=${(moovSize / 1024 / 1024).toFixed(1)}MB`);
-
-                // 精确拉取完整 moov
-                const exactMoov = await rangeFetch(videoUrl, moovFileOffset, Math.min(moovFileOffset + moovSize, fileSize) - 1);
-                if (!exactMoov) break;
-                moovBuf = exactMoov;
-                moovAtTail = true;
-                log(`moov 拉取完成: ${(moovBuf.byteLength / 1024).toFixed(1)}KB`);
-                break;
-            }
-        }
-        if (!moovBuf) { log('1MB/2MB/4MB 头尾均未找到 moov，放弃'); return null; }
-    } else {
-        log('头部找到 moov');
-    }
-
-    // ── ③ 解析首帧偏移 ──
-    log('解析首帧偏移...');
+    // ── ③ 解析首帧 ──
     const frameInfo = parseFirstVideoFrame(moovBuf);
     if (!frameInfo) { log('解析首帧偏移失败'); return null; }
     log(`首帧: offset=${frameInfo.offset}, size=${(frameInfo.size / 1024).toFixed(1)}KB`);
 
-    // 取首帧及后续共约 500KB 数据（包含多个帧，允许 seek 到第 1 秒避免黑帧）
-    const fetchSize = Math.max(frameInfo.size, 500 * 1024);
-    let frameBuf: ArrayBuffer;
-    if (!moovAtTail && (frameInfo.offset + fetchSize <= HEAD_SIZE)) {
-        log('帧数据已在头部范围中');
-        frameBuf = headBuf.slice(frameInfo.offset, frameInfo.offset + fetchSize);
-    } else {
-        const end = Math.min(frameInfo.offset + fetchSize - 1, fileSize || Infinity);
-        log(`拉取帧数据: ${frameInfo.offset}-${end}`);
-        const f = await rangeFetch(videoUrl, frameInfo.offset, end);
-        if (!f) { log('帧数据拉取失败'); return null; }
-        frameBuf = f;
+    // ── ④ 流式重试：纯色 → 用索引定位后续帧 → 按需渐进拉取 ──
+    // 关键：始终从首帧偏移起拉，确保关键帧包含在内；
+    // 拉取量 = getByteRangeForSamples 精确值 + 解码器安全边际
+    //
+    // 为什么需要安全边际？
+    // getByteRangeForSamples 返回的是涵盖帧0→目标帧所有 chunk 的严格最小范围，
+    // 但浏览器 MP4 解码器在 seek 时会预读后续数据、维护内部缓冲，
+    // 若后续 chunk 被 fixStco 映射为 FAR（超出数据范围），解码会静默失败（黑帧）。
+    // 因此追加约 1 秒码率的数据量作为安全边际——实测 512KB 不够，~1MB 足够。
+    const FRAME_RATE = 30;
+    const MAX_RETRIES = 5;
+    const FIRST_FETCH_SIZE = Math.max(frameInfo.size, 512 * 1024); // 首帧最少 512KB
+    const SEEK_MARGIN = 5 * 1024 * 1024; // 解码器 seek 安全边际：确保足够 chunk 不被 FAR
+
+    let firstBlob: Blob | null = null; // 保存首帧，全部纯色时回退用
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const targetFrame = attempt * 30; // 0, 30, 60, 90, 120, 150
+        const targetTime = targetFrame / FRAME_RATE;
+
+        // 用索引精确定位所需字节范围
+        const exact = getByteRangeForSamples(index, targetFrame);
+        if (!exact) {
+            log(`样本 ${targetFrame} 超出范围 (共 ${index.totalSamples})`);
+            break;
+        }
+
+        // 始终从首帧偏移起拉；首帧取最小值，重试加上安全边际
+        const byteOffset = exact.offset;
+        const fetchSize = attempt === 0
+            ? FIRST_FETCH_SIZE
+            : Math.max(exact.size, exact.size + SEEK_MARGIN);
+
+        // 按需拉取帧数据
+        let frameBuf: ArrayBuffer;
+        if (byteOffset + fetchSize <= HEAD_SIZE) {
+            log(`帧数据在头部范围内，复用 (${(fetchSize / 1024).toFixed(0)}KB)`);
+            frameBuf = headBuf.slice(byteOffset, byteOffset + fetchSize);
+        } else {
+            const end = byteOffset + fetchSize - 1;
+            log(`拉取帧数据: ${byteOffset}-${end} (${(fetchSize / 1024 / 1024).toFixed(1)}MB)`);
+            const f = await rangeFetch(videoUrl, byteOffset, end);
+            if (!f) { log('帧数据拉取失败'); continue; }
+            frameBuf = f;
+        }
+        log(`帧数据: ${(frameBuf.byteLength / 1024).toFixed(1)}KB`);
+
+        // 拼装微型 MP4
+        log('拼装微型 MP4...');
+        const mp4Blob = buildMiniMp4(headBuf, moovBuf, frameBuf, byteOffset);
+        if (!mp4Blob) { log('拼装失败'); continue; }
+        log(`微型 MP4: ${(mp4Blob.size / 1024).toFixed(1)}KB`);
+
+        // 解码（seek 到目标时间）
+        log('喂给 <video> 解码...');
+        const frameBlob = await decodeFrame(mp4Blob, targetTime);
+        if (!frameBlob) continue;
+
+        // 保存首帧供全部纯色时回退
+        if (attempt === 0) firstBlob = frameBlob;
+
+        // 纯色检测
+        const isSolid = await isNearSolidColor(frameBlob);
+        if (!isSolid) {
+            log(`非纯色 @ ${targetTime.toFixed(1)}s → 缩略图生成成功`);
+            return frameBlob;
+        }
+        log(attempt === 0
+            ? `首帧纯色`
+            : `+${targetFrame} 帧 (${targetTime.toFixed(1)}s) 仍纯色`);
     }
-    log(`帧数据: ${(frameBuf.byteLength / 1024).toFixed(1)}KB`);
 
-    // ── ④ 拼装微型 MP4 ──
-    log('拼装微型 MP4...');
-    const mp4Blob = buildMiniMp4(headBuf, moovBuf, frameBuf, frameInfo.offset);
-    if (!mp4Blob) { log('拼装失败'); return null; }
-    log(`微型 MP4: ${(mp4Blob.size / 1024).toFixed(1)}KB`);
-
-    // ── ⑤ 喂给 <video> 解码 ──
-    log('喂给 <video> 解码...');
-    const result = await decodeFrame(mp4Blob);
-    log(result ? '缩略图生成成功' : '解码失败');
-    return result;
+    // 全部纯色，回退到首帧
+    log('所有位置均为纯色，回退首帧');
+    return firstBlob;
 }
 
 // ── 辅助函数 ──
@@ -258,8 +320,69 @@ function fixStco(
     return dv.buffer as ArrayBuffer;
 }
 
-/** 将 MP4 blob 喂给 <video> 解码出第一帧 */
-function decodeFrame(blob: Blob): Promise<Blob | null> {
+/** 检测缩略图是否"不可用"（纯色或近纯色，对用户无意义）
+ *
+ *  两阶段判断：
+ *  1. 亮度预判：10×10 采样均值近全黑（<20）或近全白（>235）
+ *     → 无论方差如何，直接视为不可用（黑屏/白屏/黑屏+小水印都算）
+ *  2. 方差判断：中间亮度时，若所有采样点颜色相近（maxDev<2000）
+ *     → 纯色标题卡等，也视为不可用 */
+async function isNearSolidColor(blob: Blob): Promise<boolean> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const SAMPLE = 10;
+            const canvas = document.createElement('canvas');
+            canvas.width = SAMPLE;
+            canvas.height = SAMPLE;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(false); return; }
+            ctx.drawImage(img, 0, 0, SAMPLE, SAMPLE);
+            const data = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
+            const N = data.length / 4;
+
+            // 计算平均颜色
+            let sr = 0, sg = 0, sb = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                sr += data[i];
+                sg += data[i + 1];
+                sb += data[i + 2];
+            }
+            const ar = sr / N, ag = sg / N, ab = sb / N;
+
+            // 阶段 1：亮度预判——近全黑/全白直接视为不可用缩略图
+            // 覆盖纯黑屏、纯白屏，以及"黑屏+小水印"等 99% 黑暗画面
+            const avgBrightness = (ar + ag + ab) / 3;
+            if (avgBrightness < 20 || avgBrightness > 235) {
+                resolve(true);
+                return;
+            }
+
+            // 计算任一像素偏离均值的最大平方差
+            let maxDev = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                const dr = data[i] - ar;
+                const dg = data[i + 1] - ag;
+                const db = data[i + 2] - ab;
+                const dev = dr * dr + dg * dg + db * db;
+                if (dev > maxDev) maxDev = dev;
+            }
+
+            // 阶段 2：中间亮度纯色（如纯色标题卡），阈值 ≈ 45²×3
+            resolve(maxDev < 2000);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(false);
+        };
+        img.src = url;
+    });
+}
+
+/** 将 MP4 blob 喂给 <video> 解码，可指定 seek 到目标时间（秒）截取 */
+function decodeFrame(blob: Blob, seekTime?: number): Promise<Blob | null> {
     return new Promise((resolve) => {
         const blobUrl = URL.createObjectURL(blob);
         const video = document.createElement('video');
@@ -267,8 +390,9 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
         video.muted = true;
         video.preload = 'auto';
 
-        let loaded = false;
+        const log = createLogger('thumb');
         let resolved = false;
+
         const finish = (result: Blob | null) => {
             if (resolved) return;
             resolved = true;
@@ -277,19 +401,13 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             URL.revokeObjectURL(blobUrl);
             resolve(result);
         };
+
         const timer = setTimeout(() => {
-            createLogger('thumb')('<video> 解码超时');
+            log('<video> 解码超时');
             finish(null);
         }, 10_000);
 
-        // 微型 MP4 只包含文件头部的连续数据块，后续帧可能缺失。
-        // loadeddata 事件表明首帧已解码完成，此时立即截取画面。
-        // 首帧后就忽略 onerror（后续帧缺失不关首帧的事）。
-        video.onloadeddata = () => {
-            if (loaded) return;
-            loaded = true;
-            createLogger('thumb')(`首帧已就绪: ${video.videoWidth}x${video.videoHeight}`);
-            clearTimeout(timer);
+        const capture = () => {
             const canvas = document.createElement('canvas');
             const maxW = 380;
             const scale = Math.min(1, maxW / (video.videoWidth || 1));
@@ -298,15 +416,28 @@ function decodeFrame(blob: Blob): Promise<Blob | null> {
             const ctx = canvas.getContext('2d');
             if (!ctx) { finish(null); return; }
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob((blob) => {
-                createLogger('thumb')('canvas 绘制完成');
-                finish(blob);
+            canvas.toBlob((b) => {
+                log('canvas 绘制完成');
+                finish(b);
             }, 'image/webp', 0.5);
         };
 
+        video.onloadeddata = () => {
+            if (seekTime && seekTime > 0 && video.duration > seekTime + 0.1) {
+                log(`就绪，seek → ${seekTime.toFixed(1)}s`);
+                video.currentTime = seekTime;
+                video.onseeked = () => {
+                    // seeked 触发时 4K 解码可能未完成渲染，延迟一帧再截取
+                    setTimeout(capture, 150);
+                };
+            } else {
+                log(`就绪: ${video.videoWidth}x${video.videoHeight}`);
+                capture();
+            }
+        };
+
         video.onerror = () => {
-            if (loaded) return; // loadeddata 已发生，忽略后续解码错误
-            createLogger('thumb')('<video> 解码错误');
+            log('<video> 解码错误');
             finish(null);
         };
     });

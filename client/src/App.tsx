@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster, toast, useSonner } from 'sonner';
 import Navbar from './components/Navbar';
@@ -18,6 +18,38 @@ export default function App() {
     const { toasts } = useSonner();
     const toastsRef = useRef(toasts);
     toastsRef.current = toasts;
+
+    // 全局：浏览器前进/后退时恢复滚动位置
+    useEffect(() => {
+        const SCROLL_KEY = 'scrollPos:';
+        const onPop = () => {
+            const key = SCROLL_KEY + window.location.pathname + window.location.search;
+            const v = sessionStorage.getItem(key);
+            if (v) {
+                const y = parseInt(v, 10);
+                if (y > 0) {
+                    const attempt = () => {
+                        if (document.body.scrollHeight > y) {
+                            window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
+                        } else {
+                            requestAnimationFrame(attempt);
+                        }
+                    };
+                    const timeout = setTimeout(() => window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior }), 3000);
+                    requestAnimationFrame(() => requestAnimationFrame(attempt));
+                    // 成功后清理超时
+                    const check = setInterval(() => {
+                        if (Math.abs(window.scrollY - y) < 10) {
+                            clearTimeout(timeout);
+                            clearInterval(check);
+                        }
+                    }, 100);
+                }
+            }
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
 
     const handleToastClick = useCallback((e: React.MouseEvent) => {
         const el = (e.target as HTMLElement).closest<HTMLElement>('[data-sonner-toast]');
