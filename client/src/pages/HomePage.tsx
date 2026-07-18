@@ -17,6 +17,22 @@ import { useScrollRestore } from '../hooks/useScrollRestore';
 
 import { HOME_PAGE_SIZE, TOAST_DURATION, DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER, STORAGE_PREFIX } from '../config';
 
+/** 从 URLSearchParams 解析所有筛选/搜索/排序/分页参数 */
+function parseUrlParams(params: URLSearchParams) {
+    const raw = params.get('sort') || '';
+    const [sortField, sortDir] = raw ? raw.split(':') : [];
+    return {
+        tagExpr: params.get('tags') || '',
+        authorExpr: params.get('authorExpr') || '',
+        uploaderId: params.get('uploaderId') || '',
+        committedSearch: params.get('search') || '',
+        typeFilter: params.get('type') || '',
+        page: parseInt(params.get('page') || '1', 10) || 1,
+        sortBy: sortField || DEFAULT_SORT_FIELD,
+        sortOrder: sortDir || DEFAULT_SORT_ORDER,
+    };
+}
+
 const STORAGE_KEY = STORAGE_PREFIX + 'home_state';
 
 interface HomeState {
@@ -64,24 +80,20 @@ export default function HomePage() {
     const [generatedThumbs, setGeneratedThumbs] = useState<Record<string, string>>({});
     const generatedRef = useRef<Set<string>>(new Set());
     const saved = loadState();
+    const urlParsed = parseUrlParams(searchParams);
     // URL 参数优先于 localStorage（支持前进后退、外部链接）
-    const [page, setPage] = useState(parseInt(searchParams.get('page') || '') || saved.page || 1);
+    const [page, setPage] = useState(urlParsed.page || saved.page || 1);
     const [totalPages, setTotalPages] = useState(1);
     const [search, setSearch] = useState(saved.search || '');
-    const [committedSearch, setCommittedSearch] = useState(searchParams.get('search') || saved.committedSearch || '');
-    const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || saved.typeFilter || '');
-    const initExpr = searchParams.get('tags') || saved.tagExpr || '';
-    const [tagExpr, setTagExpr] = useState(initExpr);
-    const [tagInput, setTagInput] = useState(saved.tagInput || initExpr);
-    const initAuthorExpr = searchParams.get('authorExpr') || saved.authorExpr || '';
-    const [authorExpr, setAuthorExpr] = useState(initAuthorExpr);
-    const [authorInput, setAuthorInput] = useState(saved.authorInput || initAuthorExpr);
-    const initUploaderId = searchParams.get('uploaderId') || saved.uploaderId || '';
-    const [uploaderId, setUploaderId] = useState(initUploaderId);
-    const initSortRaw = searchParams.get('sort') || '';
-    const initSortParts = initSortRaw ? initSortRaw.split(':') : [];
-    const [sortBy, setSortBy] = useState(initSortParts[0] || saved.sortBy || DEFAULT_SORT_FIELD);
-    const [sortOrder, setSortOrder] = useState(initSortParts[1] || saved.sortOrder || DEFAULT_SORT_ORDER);
+    const [committedSearch, setCommittedSearch] = useState(urlParsed.committedSearch || saved.committedSearch || '');
+    const [typeFilter, setTypeFilter] = useState(urlParsed.typeFilter || saved.typeFilter || '');
+    const [tagExpr, setTagExpr] = useState(urlParsed.tagExpr || saved.tagExpr || '');
+    const [tagInput, setTagInput] = useState(saved.tagInput || urlParsed.tagExpr || '');
+    const [authorExpr, setAuthorExpr] = useState(urlParsed.authorExpr || saved.authorExpr || '');
+    const [authorInput, setAuthorInput] = useState(saved.authorInput || urlParsed.authorExpr || '');
+    const [uploaderId, setUploaderId] = useState(urlParsed.uploaderId || saved.uploaderId || '');
+    const [sortBy, setSortBy] = useState(urlParsed.sortBy !== DEFAULT_SORT_FIELD ? urlParsed.sortBy : (saved.sortBy || DEFAULT_SORT_FIELD));
+    const [sortOrder, setSortOrder] = useState(urlParsed.sortOrder !== DEFAULT_SORT_ORDER ? urlParsed.sortOrder : (saved.sortOrder || DEFAULT_SORT_ORDER));
     const [sortExplicit, setSortExplicit] = useState(false); // 用户是否主动点过排序
 
     // 解析标签表达式分组，用于高亮不同筛选项
@@ -156,6 +168,7 @@ export default function HomePage() {
     }, [search, committedSearch, typeFilter, tagExpr, tagInput, authorExpr, authorInput, uploaderId, sortBy, sortOrder, page]);
 
     // 同步状态 → URL（使用 React Router 的 setSearchParams，原子操作无竞态）
+    const internalChange = useRef(false);
     useEffect(() => {
         const next = new URLSearchParams(searchParams);
         const setOrDel = (k: string, v: string) => v ? next.set(k, v) : next.delete(k);
@@ -166,11 +179,28 @@ export default function HomePage() {
         setOrDel('type', typeFilter);
         setOrDel('sort', sortBy !== DEFAULT_SORT_FIELD || sortOrder !== DEFAULT_SORT_ORDER ? `${sortBy}:${sortOrder}` : '');
         setOrDel('page', page > 1 ? String(page) : '');
-        // 仅当参数有变化时才更新，避免无限循环
         if (next.toString() !== searchParams.toString()) {
+            internalChange.current = true;
             setSearchParams(next, { replace: false });
         }
     }, [tagExpr, authorExpr, uploaderId, committedSearch, typeFilter, sortBy, sortOrder, page]);
+
+    // 反向同步：URL → state（用户手动修改地址栏、前进后退时响应）
+    useEffect(() => {
+        if (internalChange.current) { internalChange.current = false; return; }
+        const p = parseUrlParams(searchParams);
+        setTagExpr(p.tagExpr);
+        setTagInput(p.tagExpr);
+        setAuthorExpr(p.authorExpr);
+        setAuthorInput(p.authorExpr);
+        setUploaderId(p.uploaderId);
+        setCommittedSearch(p.committedSearch);
+        setTypeFilter(p.typeFilter);
+        setPage(p.page);
+        setSortBy(p.sortBy);
+        setSortOrder(p.sortOrder);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     const doSearch = () => {
         setPage(1);
