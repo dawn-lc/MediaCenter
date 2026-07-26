@@ -73,7 +73,7 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
             u.searchParams.set('options', '-c timezone=UTC');
             return u.href;
         })(),
-        max: 10
+        max: 64
     });
 
     db = drizzle({ client: pool });

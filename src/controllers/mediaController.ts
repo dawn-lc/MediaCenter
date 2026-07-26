@@ -5,14 +5,14 @@ import { rename } from 'fs/promises';
 import { eq, ilike, like, and, or, desc, count, sql, inArray, isNull, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { similarity } from '../db/index';
-import { deleteFile, getMediaCategory, isSupportedMimeType } from '../utils/storage';
+import { deleteFile, isSupportedMimeType } from '../utils/storage';
 import mime from 'mime-types';
 import { generateSignedUrl } from '../utils/signUrl';
 import { hasMinRole, ALL_ROLES, USER_ROLES } from '../utils/roles';
 import { parseTagExpr, evaluateTagAst, evaluateAuthorAst } from '../utils/tagParser';
 import { computeFileHash } from '../utils/hash';
 import config from '../config';
-import { isString, isNumber, isArray, isNotEmpty, isNullOrUndefined, isUndefined, prune } from '../utils/env';
+import { isString, isNumber, isArray, isNotEmpty, isNullOrUndefined, isUndefined, prune, checkFileExists } from '../utils/env';
 
 /**
  * 同步媒体标签：创建不存在的标签，建立关联，移除旧关联
@@ -138,6 +138,8 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
         const type = isString(req.query.type) ? req.query.type : undefined;
         const search = isString(req.query.search) ? req.query.search : undefined;
         const fileHash = isString(req.query.fileHash) ? req.query.fileHash : undefined;
+        const filePath = isString(req.query.filePath) ? req.query.filePath : undefined;
+        const fileName = isString(req.query.fileName) ? req.query.fileName : undefined;
         const tagsExpr = isString(req.query.tags) ? req.query.tags : undefined;
         const authorExpr = isString(req.query.authorExpr) ? req.query.authorExpr : undefined;
         const authorId = isString(req.query.authorId) ? req.query.authorId : undefined;
@@ -168,6 +170,25 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
             }
             conditions.push(eq(schema.media.fileHash, fileHash));
         }
+
+        if (filePath) {
+            // 仅管理员允许通过 filePath 精确查找媒体
+            if (req.user?.role !== 'admin') {
+                res.status(403).json({ error: 'admin.required' });
+                return;
+            }
+            conditions.push(ilike(schema.media.filePath, `%${filePath}%`));
+        }
+
+        if (fileName) {
+            // 仅管理员允许通过 fileName 精确查找媒体
+            if (req.user?.role !== 'admin') {
+                res.status(403).json({ error: 'admin.required' });
+                return;
+            }
+            conditions.push(ilike(schema.media.fileName, `%${fileName}%`));
+        }
+
 
         // 标签表达式筛选：?tags=A&(B|C)|D
         //   支持括号、& (AND)、| (OR)
@@ -339,6 +360,7 @@ export async function getMedia(req: Request, res: Response): Promise<void> {
                 fileName: schema.media.fileName,
                 filePath: schema.media.filePath,
                 fileSize: schema.media.fileSize,
+                fileHash: schema.media.fileHash,
                 mimeType: schema.media.mimeType,
                 minRole: schema.media.minRole,
                 duration: schema.media.duration,
@@ -425,6 +447,7 @@ export async function getMedia(req: Request, res: Response): Promise<void> {
             delete response.filePath;
             delete response.fileName;
             delete response.mediaInfo;
+            delete response.fileHash;
         }
 
         res.json({ media: response });
@@ -505,6 +528,7 @@ export async function createMedia(req: Request, res: Response): Promise<void> {
         let size: number;
         let mimetype: string;
         let fileHash: string | null;
+        let sourceMeta: string | null = null;
         let isMulterUpload = false;
 
         if (hasLocalPath) {
@@ -526,6 +550,8 @@ export async function createMedia(req: Request, res: Response): Promise<void> {
             size = isNumber(req.body.fileSize) ? req.body.fileSize! : 0;
             // 文件可能尚未就绪（aria2 下载中），hash 非必需
             fileHash = isString(req.body.fileHash) ? req.body.fileHash : null;
+            // 外部导入可能附带原始元数据（如 iwara API 返回），存入独立列避免被 probe 覆盖
+            sourceMeta = isString(req.body.sourceMeta) ? req.body.sourceMeta : null;
         } else {
             // ── 普通上传（Multer） ──
             isMulterUpload = true;
@@ -589,9 +615,12 @@ export async function createMedia(req: Request, res: Response): Promise<void> {
                 fileSize: size,
                 mimeType: mimetype,
                 uploaderId,
-                minRole: 'owner'
+                minRole: 'owner',
+                sourceMeta
             } satisfies typeof schema.media.$inferInsert)
             .execute();
+
+        // 媒体信息在首次流请求时阻塞提取（确保文件完整）
 
         res.status(201).json({
             message: 'media.uploadSuccess',
@@ -663,7 +692,11 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
         // ── 管理员专属字段 ──
         if (isAdmin) {
             if (!isUndefined(bodyFn)) updates.fileName = bodyFn;
-            if (!isUndefined(bodyFp)) updates.filePath = bodyFp;
+            if (!isNullOrUndefined(bodyFp) && isString(bodyFp)) {
+                if (await checkFileExists(bodyFp)) {
+                    updates.filePath = bodyFp;
+                }
+            }
             if (!isUndefined(bodyMt)) updates.mimeType = bodyMt;
             if (!isUndefined(bodyUid)) updates.uploaderId = bodyUid;
             if (!isUndefined(bodyCa)) updates.createdAt = bodyCa;
@@ -674,6 +707,7 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             if (!isUndefined(bodyTp)) updates.thumbPath = isString(bodyTp) ? bodyTp : null;
             if (!isUndefined(mediaInfo)) updates.mediaInfo = isString(mediaInfo) ? mediaInfo : null;
             if (!isUndefined(source)) updates.source = isString(source) ? source : null;
+            if (!isUndefined(req.body.sourceMeta)) updates.sourceMeta = isString(req.body.sourceMeta) ? req.body.sourceMeta : null;
             if (!isUndefined(duration)) updates.duration = isNullOrUndefined(duration) ? null : Number(duration);
             if (!isUndefined(authorName)) updates.authorId = await resolveAuthorId(isString(authorName) ? authorName : undefined, req.user!.role!);
         }

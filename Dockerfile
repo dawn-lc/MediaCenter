@@ -22,6 +22,9 @@ FROM node:24-alpine AS runner
 
 WORKDIR /app
 
+# 安装运行时依赖（ffmpeg 用于提取媒体元数据）
+RUN apk add --no-cache ffmpeg
+
 # 安装生产依赖
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

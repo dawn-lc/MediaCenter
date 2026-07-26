@@ -1,3 +1,5 @@
+import { access, constants } from "node:fs/promises";
+
 declare global {
     interface String {
         isEmpty(): boolean;
@@ -138,4 +140,12 @@ export function prune<T>(data: T): Pruned<T> {
         return result as Pruned<T>;
     }
     return data as Pruned<T>;
+}
+export async function checkFileExists(filePath: string) {
+    try {
+        await access(filePath, constants.F_OK);
+        return true; // 文件存在
+    } catch {
+        return false; // 文件不存在
+    }
 }

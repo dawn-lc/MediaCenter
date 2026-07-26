@@ -7,6 +7,29 @@ import send from 'send';
 import { getDatabase, schema } from '../db/index';
 import { hasMinRole } from '../utils/roles';
 import { isString } from '../utils/env';
+import { probeMedia, serializeMediaInfo } from '../utils/ffprobe';
+import { resolveBestMimeType } from '../utils/mimeType';
+import { stat } from 'fs/promises';
+
+/** 首次访问时阻塞 probe（文件可能刚导入不完整），结果缓存到 DB */
+async function ensureProbed(db: ReturnType<typeof getDatabase>, mediaId: string, filePath: string, currentMimeType: string): Promise<string> {
+    const info = await probeMedia(filePath);
+    if (!info) return currentMimeType;
+
+    const bestMimeType = resolveBestMimeType(currentMimeType, info.videoCodec);
+    await db
+        .update(schema.media)
+        .set({
+            duration: info.duration,
+            mimeType: bestMimeType,
+            mediaInfo: serializeMediaInfo(info),
+        })
+        .where(eq(schema.media.id, mediaId))
+        .execute()
+        .catch(() => { /* 非关键 */ });
+
+    return bestMimeType;
+}
 
 /**
  * 流式传输媒体文件
@@ -29,7 +52,9 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
                 mimeType: schema.media.mimeType,
                 minRole: schema.media.minRole,
                 fileName: schema.media.fileName,
-                uploaderId: schema.media.uploaderId
+                uploaderId: schema.media.uploaderId,
+                mediaInfo: schema.media.mediaInfo,
+                fileSize: schema.media.fileSize
             })
             .from(schema.media)
             .where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined))
@@ -43,7 +68,19 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // 权限检查：resolveStreamUser 中间件已验证签名、设置 req.user，直接据此判断
+        if (mediaRecord.fileSize === 0) {
+            const fileInfo = await stat(mediaRecord.filePath);
+            await db
+                .update(schema.media)
+                .set({
+                    fileSize: fileInfo.size
+                })
+                .where(eq(schema.media.id, mediaRecord.id))
+                .execute()
+                .catch(() => { /* 非关键 */ });
+        }
+
+        // 权限检查
         const minRole = mediaRecord.minRole ?? 'guest';
         if (minRole === 'owner') {
             if (req.user!.role !== 'admin' && req.user!.id !== mediaRecord.uploaderId) {
@@ -57,19 +94,24 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
 
         const filePath = mediaRecord.filePath;
 
-        // 检查文件是否存在
         if (!existsSync(filePath)) {
             res.status(404).json({ error: 'media.fileNotFound' });
             return;
         }
 
-        // 使用 send 包处理流式传输（自动支持 Range/206/416/缓存头）
+        // 首次访问时阻塞 probe，确保文件完整 + MIME 归一化
+        let mimeType = mediaRecord.mimeType;
+        if (!mediaRecord.mediaInfo) {
+            mimeType = await ensureProbed(db, id, filePath, mimeType);
+        }
+
         send(req, filePath, {
             etag: false,
             dotfiles: 'deny',
             maxAge: '1y'
         })
             .on('headers', (res) => {
+                // mimeType 已在 probe 阶段由 resolveBestMimeType 归一化为浏览器兼容值
                 res.setHeader('Content-Type', mediaRecord.mimeType);
                 res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
                 res.setHeader('X-Content-Type-Options', 'nosniff');

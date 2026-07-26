@@ -122,9 +122,12 @@ export async function resolveStreamUser(req: Request, res: Response, next: NextF
     const result = verifySignedUrl(id, { expires, purpose, sig, uid, role });
 
     if (!result.valid) {
-        // 缺少签名参数 → 回退到 JWT 认证（由后续 authenticate 处理）
+        // 缺少签名参数 → 回退到已认证身份（authenticate 已设置 req.user，不要覆盖）
         if (result.error === 'signUrl.missingParams') {
-            req.user = { id: null, username: 'guest', role: 'guest' };
+            // 若 authenticate 在此之前未设置用户（如未带 token），则设为访客
+            if (!req.user) {
+                req.user = { id: null, username: 'guest', role: 'guest' };
+            }
             next();
             return;
         }

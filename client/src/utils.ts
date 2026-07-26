@@ -95,22 +95,6 @@ export function getMediaTypeLabel(mimeType: string): string {
     return map[mimeType] || (mimeType ? mimeType.split('/')[1]?.toUpperCase() : '未知');
 }
 
-/**
- * 标准化 MIME 类型，某些格式需映射为浏览器可识别的类型
- * 例：video/quicktime → video/mp4（MOV 使用 H.264，浏览器支持度更高）
- */
-export function normalizeMimeType(mimeType: string): string {
-    switch (mimeType) {
-        case 'video/quicktime':
-            return 'video/mp4';
-        case 'video/x-matroska':
-            return 'video/webm';
-        default:
-            return mimeType;
-    }
-}
-
-
 export function formatDuration(seconds: number): string {
     if (seconds <= 0) return '';
     const h = Math.floor(seconds / 3600);

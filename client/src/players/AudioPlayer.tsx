@@ -5,7 +5,6 @@ import type { Media } from '../types';
 import { usePlaylistStore } from '../stores/playlist';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { resolveApiUrl } from '../api';
-import { normalizeMimeType } from '../utils';
 import PlayerLayout from './PlayerLayout';
 
 interface Props {
@@ -75,7 +74,7 @@ export default function AudioPlayer({ media }: Props) {
         <PlayerLayout media={media} mediaWrapperClass="audio-card">
             <div className="thumb-icon">🎵</div>
             <audio ref={audioRef} controls autoPlay preload="auto" className="audio-player">
-                <source src={streamUrl} type={normalizeMimeType(media.mimeType)} />
+                <source src={streamUrl} type={media.mimeType} />
             </audio>
         </PlayerLayout>
     );

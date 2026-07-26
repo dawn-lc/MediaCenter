@@ -6,7 +6,6 @@ import { usePlayerSettings } from '../stores/playerSettings';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { resolveApiUrl } from '../api';
 import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO } from '../config';
-import { normalizeMimeType } from '../utils';
 import PlayerLayout from './PlayerLayout';
 
 interface Props {
@@ -48,6 +47,22 @@ export default function VideoPlayer({ media }: Props) {
 
                 // 应用持久化的音量
                 player.volume(savedVolume);
+
+                // 处理媒体播放错误
+                player.on('error', () => {
+                    const err = player.error();
+                    if (!err) return;
+                    // MediaError.code: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
+                    const errMsg =
+                        err.code === 4
+                            ? `不支持此媒体格式 (${media.mimeType})，该文件可能包含浏览器无法解码的编解码器`
+                            : err.code === 3
+                                ? '媒体解码失败，文件可能已损坏'
+                                : err.code === 2
+                                    ? '网络错误，无法加载媒体文件'
+                                    : `播放错误 (code: ${err.code}): ${err.message}`;
+                    console.error('[VideoPlayer] 播放错误:', errMsg, err);
+                });
 
                 // 监听倍速变化并持久化
                 player.on('ratechange', () => {
@@ -181,7 +196,7 @@ export default function VideoPlayer({ media }: Props) {
     return (
         <PlayerLayout media={media} mediaWrapperStyle={portraitMaxWidth ? { maxWidth: portraitMaxWidth } : undefined}>
             <video ref={videoRef} className="video-js vjs-default-skin vjs-big-play-centered" controls autoPlay={autoPlayVideo} preload="auto">
-                <source src={streamUrl} type={normalizeMimeType(media.mimeType)} />
+                <source src={streamUrl} type={media.mimeType} />
             </video>
         </PlayerLayout>
     );

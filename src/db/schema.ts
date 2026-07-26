@@ -31,6 +31,7 @@ export const media = pgTable(
         duration: doublePrecision('duration'),
         thumbPath: text('thumb_path'),
         mediaInfo: text('media_info'),
+        sourceMeta: text('source_meta'),
         source: text('source'),
         authorId: uuid('author_id').references(() => authors.id, { onDelete: 'set null' }),
         uploaderId: uuid('uploader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

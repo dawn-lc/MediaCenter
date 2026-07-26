@@ -62,7 +62,7 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
     console.log(`[Scan] 待导入 ${toInsert.length}, 已存在跳过 ${result.skipped}`);
 
     // 4. 并发导入（限制并发数）
-    const CONCURRENCY = 4;
+    const CONCURRENCY = 32;
     let index = 0;
 
     async function processNext(): Promise<void> {
@@ -71,10 +71,11 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
             const file = toInsert[i];
             console.log(`[Scan] 导入 [${i + 1}/${toInsert.length}] ${file.name}`);
             try {
+                const id = uuidv4();
                 await db
                     .insert(schema.media)
                     .values({
-                        id: uuidv4(),
+                        id,
                         title: basename(file.name, file.ext).slice(0, config.maxTitleLength),
                         description: `从 ${dirPath} 扫描导入`,
                         fileName: file.name,
