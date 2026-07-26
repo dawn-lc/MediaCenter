@@ -268,7 +268,9 @@
         "pathNotFound": "提供的文件路径不存在",
         "duplicateFile": "文件已存在，请勿重复上传",
         "restoreSuccess": "恢复成功",
-        "notDeleted": "该媒体未被删除"
+        "notDeleted": "该媒体未被删除",
+        "invalidTagExpr": "标签表达式语法错误",
+        "invalidAuthorExpr": "作者表达式语法错误"
     },
     "meta": {
         "fileSize": "{size}",

@@ -153,27 +153,31 @@ export default function PlayerInfo({ media, metaExtra }: PlayerInfoProps) {
                     )}
                 </>
             )}
-            {media.tags && media.tags.length > 0 && (
-                <div className="player-tags">
-                    {media.tags.map((t) => {
-                        const tagGroupMap = getTagGroupMap(new URLSearchParams(window.location.search).get('tags') || '');
-                        const gi = tagGroupMap[t.name];
-                        const cls = gi !== undefined ? `tag-badge tag-clickable tag-group-${gi}` : 'tag-badge tag-clickable';
-                        return (
-                            <span
-                                key={t.id}
-                                className={cls}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate('/?tags=' + encodeURIComponent(t.name));
-                                }}
-                            >
-                                {t.name}
-                            </span>
-                        );
-                    })}
-                </div>
-            )}
+            {media.tags && media.tags.length > 0 && (() => {
+                const tagGroupMap = getTagGroupMap(new URLSearchParams(window.location.search).get('tags') || '');
+                return (
+                    <div className="player-tags">
+                        {media.tags.map((t) => {
+                            const gi = tagGroupMap[t.name];
+                            const cls = gi !== undefined ? 'tag-badge tag-clickable tag-group-highlight' : 'tag-badge tag-clickable';
+                            const hue = gi !== undefined ? (gi * 137.5) % 360 : undefined;
+                            return (
+                                <span
+                                    key={t.id}
+                                    className={cls}
+                                    style={hue !== undefined ? { '--tag-hue': hue } as React.CSSProperties : undefined}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/?tags=' + encodeURIComponent(t.name));
+                                    }}
+                                >
+                                    {t.name}
+                                </span>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
         </div>
     );
 }

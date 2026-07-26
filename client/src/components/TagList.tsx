@@ -39,12 +39,14 @@ export default function TagList({ tags, tagExpr = '', onTagClick, collapsed: def
                 {tags.map((tag) => {
                     const gi = tagGroupMap[tag.name];
                     const cls = gi !== undefined
-                        ? `media-card-tag tag-clickable tag-group-${gi}`
+                        ? 'media-card-tag tag-clickable tag-group-highlight'
                         : 'media-card-tag tag-clickable';
+                    const hue = gi !== undefined ? (gi * 137.5) % 360 : undefined;
                     return (
                         <span
                             key={tag.id}
                             className={cls}
+                            style={hue !== undefined ? { '--tag-hue': hue } as React.CSSProperties : undefined}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onTagClick?.(tag.name);

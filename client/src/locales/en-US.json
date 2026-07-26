@@ -269,7 +269,9 @@
         "pathNotFound": "The provided file path does not exist",
         "duplicateFile": "File already exists, duplicate upload detected",
         "restoreSuccess": "Restored successfully",
-        "notDeleted": "Media is not deleted"
+        "notDeleted": "Media is not deleted",
+        "invalidTagExpr": "Invalid tag expression",
+        "invalidAuthorExpr": "Invalid author expression"
     },
     "meta": {
         "fileSize": "{size}",

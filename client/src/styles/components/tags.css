@@ -133,47 +133,11 @@
     color: var(--danger);
 }
 
-/* ========== 标签分组高亮颜色 ========== */
-.tag-group-0 {
-    background: rgba(108, 92, 231, 0.45) !important;
-    border-color: rgba(108, 92, 231, 0.7) !important;
-    color: #d5d0ff !important;
-}
-
-.tag-group-1 {
-    background: rgba(0, 206, 201, 0.4) !important;
-    border-color: rgba(0, 206, 201, 0.6) !important;
-    color: #a0f0ed !important;
-}
-
-.tag-group-2 {
-    background: rgba(253, 121, 168, 0.4) !important;
-    border-color: rgba(253, 121, 168, 0.6) !important;
-    color: #ffc8dc !important;
-}
-
-.tag-group-3 {
-    background: rgba(253, 203, 110, 0.4) !important;
-    border-color: rgba(253, 203, 110, 0.6) !important;
-    color: #fff0cc !important;
-}
-
-.tag-group-4 {
-    background: rgba(85, 239, 196, 0.4) !important;
-    border-color: rgba(85, 239, 196, 0.6) !important;
-    color: #b8fae4 !important;
-}
-
-.tag-group-5 {
-    background: rgba(116, 185, 255, 0.4) !important;
-    border-color: rgba(116, 185, 255, 0.6) !important;
-    color: #cce5ff !important;
-}
-
-.tag-group-6 {
-    background: rgba(162, 155, 254, 0.4) !important;
-    border-color: rgba(162, 155, 254, 0.6) !important;
-    color: #e2dfff !important;
+/* ========== 标签分组高亮颜色（无限色相，用 CSS 变量 --tag-hue 控制） ========== */
+.tag-group-highlight {
+    background: hsl(var(--tag-hue, 260), 60%, 40%, 0.45) !important;
+    border-color: hsl(var(--tag-hue, 260), 60%, 40%, 0.7) !important;
+    color: hsl(var(--tag-hue, 260), 50%, 85%) !important;
 }
 
 /* ========== 徽章 ========== */

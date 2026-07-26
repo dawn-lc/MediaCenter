@@ -131,32 +131,49 @@ export function isValidHttpUrl(url: string): boolean {
 }
 
 /**
- * ===== 标签表达式 AST 解析器（与后端 tagParser.ts 一致） =====
- * 支持括号、& (AND)、| (OR)
+ * ===== 标签表达式 AST 解析器（与后端 exprParser.ts 一致） =====
+ * 支持括号、& (AND)、| (OR)、! (NOT/排除)、引号包裹
  * 语法:
  *   expr     → or_expr
  *   or_expr  → and_expr ('|' and_expr)*
  *   and_expr → primary ('&' primary)*
- *   primary  → '(' expr ')' | tag_name
+ *   primary  → '!' primary | '(' expr ')' | '"'...'"' | "'"..."'" | leaf_name
  */
 
-type AstNode = { type: 'tag'; name: string } | { type: 'and'; left: AstNode; right: AstNode } | { type: 'or'; left: AstNode; right: AstNode };
+type AstNode = { type: 'leaf'; name: string } | { type: 'not'; child: AstNode } | { type: 'and'; left: AstNode; right: AstNode } | { type: 'or'; left: AstNode; right: AstNode };
 
 function tokenize(expr: string): string[] {
     const tokens: string[] = [];
     let i = 0;
     while (i < expr.length) {
         const ch = expr[i];
-        if (ch === ' ' || ch === '\t') {
+        if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
             i++;
             continue;
         }
-        if ('()&|'.includes(ch)) {
+        if ('()&|!\n\r'.includes(ch)) {
             tokens.push(ch);
             i++;
+        } else if (ch === '"' || ch === "'") {
+            // 引号字符串：支持转义 \\  \"  \'
+            const quote = ch;
+            let name = '';
+            i++;
+            while (i < expr.length && expr[i] !== quote) {
+                if (expr[i] === '\\' && i + 1 < expr.length) {
+                    i++;
+                    name += expr[i];
+                } else {
+                    name += expr[i];
+                }
+                i++;
+            }
+            if (i >= expr.length) break;
+            i++;
+            tokens.push(name);
         } else {
             let name = '';
-            while (i < expr.length && !'()&| \t'.includes(expr[i])) {
+            while (i < expr.length && !'()&|! \t\n\r"\' '.includes(expr[i])) {
                 name += expr[i];
                 i++;
             }
@@ -194,6 +211,13 @@ function parseAnd(tokens: string[], i: number, depth: number): { node: AstNode; 
 function parsePrimary(tokens: string[], i: number, depth: number): { node: AstNode; i: number } {
     if (depth > MAX_DEPTH) throw new Error('标签表达式嵌套过深');
     if (i >= tokens.length) throw new Error('表达式意外结束');
+
+    // NOT / 排除: !X
+    if (tokens[i] === '!') {
+        const { node: child, i: next } = parsePrimary(tokens, i + 1, depth + 1);
+        return { node: { type: 'not', child }, i: next };
+    }
+
     if (tokens[i] === '(') {
         const { node, i: next } = parseOr(tokens, i + 1, depth + 1);
         if (next >= tokens.length || tokens[next] !== ')') {
@@ -201,62 +225,63 @@ function parsePrimary(tokens: string[], i: number, depth: number): { node: AstNo
         }
         return { node, i: next + 1 };
     }
-    if (tokens[i] === ')' || tokens[i] === '&' || tokens[i] === '|') {
+    if (tokens[i] === ')' || tokens[i] === '&' || tokens[i] === '|' || tokens[i] === '!') {
         throw new Error(`意外的符号: ${tokens[i]}`);
     }
-    return { node: { type: 'tag', name: tokens[i] }, i: i + 1 };
+    return { node: { type: 'leaf', name: tokens[i] }, i: i + 1 };
 }
 
 function parseTagExpr(expr: string): AstNode | null {
     if (expr.length > MAX_EXPR_LENGTH) throw new Error(`标签表达式过长（上限 ${MAX_EXPR_LENGTH} 字符）`);
     const tokens = tokenize(expr);
     if (tokens.length === 0) return null;
-    const { node } = parseOr(tokens, 0, 0);
+    const { node, i } = parseOr(tokens, 0, 0);
+    if (i < tokens.length) throw new Error(`多余的字符: '${tokens[i]}'`);
     return node;
 }
 
 /**
  * 遍历 AST 按顶层 OR 分割分组
- * 将 OR 链压平，每个分支独立分组
+ * 两趟：先压平顶层 OR 链，再逐组分配叶子
  * 例如:
- *   "A&B|C"               → OR(AND(A,B), C)       → A:0, B:0, C:1
- *   "(A&B)|C|D"           → OR(OR(AND(A,B),C),D)  → A:0, B:0, C:1, D:2
- *   "A&(B|C)"             → AND(A, OR(B,C))       → A:0, B:0, C:0  (无顶层 OR，全一组)
- *   "A&(B|C)|D"           → OR(AND(A,OR(B,C)),D)  → A:0, B:0, C:0, D:1
+ *   "A&B|C"               → A:0, B:0, C:1
+ *   "A&(B|C)"             → A:0, B:0, C:0  (内层 OR 不裂分)
  */
 function assignGroupIndices(ast: AstNode): Record<string, number> {
     const map: Record<string, number> = {};
 
-    // 压平 OR 链：OR(OR(A,B),C) → [A, B, C]
-    function flattenOr(node: AstNode): AstNode[] {
+    // 压平顶层 OR 链到数组（避免中间数组展开，手动 push）
+    function flattenOr(node: AstNode, out: AstNode[]) {
         if (node.type === 'or') {
-            return [...flattenOr(node.left), ...flattenOr(node.right)];
+            flattenOr(node.left, out);
+            flattenOr(node.right, out);
+        } else {
+            out.push(node);
         }
-        return [node];
     }
 
-    const groups = flattenOr(ast);
+    const groups: AstNode[] = [];
+    flattenOr(ast, groups);
 
-    groups.forEach((group, gi) => {
-        // 遍历该分支内的所有标签，赋予同一组索引
+    for (let gi = 0; gi < groups.length; gi++) {
         function assign(node: AstNode) {
-            if (node.type === 'tag') {
+            if (node.type === 'leaf') {
                 if (map[node.name] === undefined) map[node.name] = gi;
+            } else if (node.type === 'not') {
+                assign(node.child);
             } else {
                 assign(node.left);
                 assign(node.right);
             }
         }
-        assign(group);
-    });
+        assign(groups[gi]);
+    }
 
     return map;
 }
 
 /**
- * 解析标签表达式，返回每个标签所属的分组索引
- * 基于 AST 实现，与后端 parsing 逻辑完全一致
- * 用于给不同筛选分组分配不同高亮颜色
+ * 解析标签表达式，返回每个标签所属的分组索引（用于高亮颜色）
  */
 export function getTagGroupMap(expr: string): Record<string, number> {
     if (!expr) return {};
@@ -265,7 +290,6 @@ export function getTagGroupMap(expr: string): Record<string, number> {
         if (!ast) return {};
         return assignGroupIndices(ast);
     } catch {
-        // 表达式非法时回退到空映射
         return {};
     }
 }

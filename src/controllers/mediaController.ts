@@ -2,17 +2,78 @@ import type { Request, Response } from 'express';
 import { v4 as uuidv4, validate } from 'uuid';
 import { basename, extname, dirname, join } from 'path';
 import { rename } from 'fs/promises';
-import { eq, ilike, like, and, or, desc, count, sql, inArray, isNull, type SQL } from 'drizzle-orm';
+import { eq, ilike, like, and, or, desc, count, sql, inArray, notInArray, isNull, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { similarity } from '../db/index';
 import { deleteFile, isSupportedMimeType } from '../utils/storage';
 import mime from 'mime-types';
 import { generateSignedUrl } from '../utils/signUrl';
 import { hasMinRole, ALL_ROLES, USER_ROLES } from '../utils/roles';
-import { parseTagExpr, evaluateTagAst, evaluateAuthorAst } from '../utils/tagParser';
+import { parseExpr, evaluateExpr } from '../utils/exprParser';
+import type { ExprNode } from '../utils/exprParser';
 import { computeFileHash } from '../utils/hash';
 import config from '../config';
 import { isString, isNumber, isArray, isNotEmpty, isNullOrUndefined, isUndefined, prune, checkFileExists } from '../utils/env';
+
+// ========== 表达式求值器（标签 / 作者维度）==========
+
+/** 获取所有未删除的媒体 ID（NOT 运算全集） */
+async function getAllMediaIds(): Promise<Set<string>> {
+    const db = getDatabase();
+    const rows = await db
+        .select({ id: schema.media.id })
+        .from(schema.media)
+        .where(isNull(schema.media.deletedAt))
+        .execute();
+    return new Set(rows.map((r) => r.id));
+}
+
+/** 标签维度求值：叶子 → 匹配 tags.name / altNames */
+async function evaluateTagAst(node: ExprNode): Promise<Set<string>> {
+    return evaluateExpr(node, async (name) => {
+        const db = getDatabase();
+        const rows = await db
+            .select({ mediaId: schema.mediaTags.mediaId })
+            .from(schema.mediaTags)
+            .innerJoin(schema.tags, eq(schema.mediaTags.tagId, schema.tags.id))
+            .where(
+                or(
+                    eq(schema.tags.name, name),
+                    sql`${name} = ANY(${schema.tags.altNames})`
+                )
+            )
+            .execute();
+        return new Set(rows.map((r) => r.mediaId));
+    }, getAllMediaIds);
+}
+
+/** 作者维度求值：叶子 → 匹配 authors.name / altNames → 反查 media */
+async function evaluateAuthorAst(node: ExprNode): Promise<Set<string>> {
+    return evaluateExpr(node, async (name) => {
+        const db = getDatabase();
+        const authorRows = await db
+            .select({ id: schema.authors.id })
+            .from(schema.authors)
+            .where(
+                or(
+                    eq(schema.authors.name, name),
+                    sql`${name} = ANY(${schema.authors.altNames})`
+                )
+            )
+            .execute();
+        const authorIds = authorRows.map((a) => a.id);
+        if (authorIds.length === 0) return new Set<string>();
+
+        const mediaRows = await db
+            .select({ id: schema.media.id })
+            .from(schema.media)
+            .where(inArray(schema.media.authorId, authorIds))
+            .execute();
+        return new Set(mediaRows.map((r) => r.id));
+    }, getAllMediaIds);
+}
+
+// ========== 标签同步 ==========
 
 /**
  * 同步媒体标签：创建不存在的标签，建立关联，移除旧关联
@@ -142,7 +203,6 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
         const fileName = isString(req.query.fileName) ? req.query.fileName : undefined;
         const tagsExpr = isString(req.query.tags) ? req.query.tags : undefined;
         const authorExpr = isString(req.query.authorExpr) ? req.query.authorExpr : undefined;
-        const authorId = isString(req.query.authorId) ? req.query.authorId : undefined;
         const uploaderId = isString(req.query.uploaderId) ? req.query.uploaderId : undefined;
         const sortBy = isString(req.query.sortBy) ? req.query.sortBy : 'createdAt';
         const sortOrder = isString(req.query.sortOrder) && req.query.sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
@@ -190,52 +250,59 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
         }
 
 
-        // 标签表达式筛选：?tags=A&(B|C)|D
-        //   支持括号、& (AND)、| (OR)
-        let tagFilterIds: string[] | null = null;
-
+        // 标签表达式筛选：?tags=A&(B|C)|D  支持 ! 排除
         if (tagsExpr) {
-            const ast = parseTagExpr(tagsExpr);
-            if (ast) {
-                const idSet = await evaluateTagAst(ast);
-                tagFilterIds = [...idSet];
+            try {
+                const ast = parseExpr(tagsExpr);
+                if (ast) {
+                    if (ast.type === 'not') {
+                        // 顶层 NOT → 只求 child，用 NOT IN 避免全量补集
+                        const idSet = await evaluateTagAst(ast.child);
+                        const ids = [...idSet];
+                        if (ids.length > 0) {
+                            conditions.push(notInArray(schema.media.id, ids));
+                        }
+                    } else {
+                        const idSet = await evaluateTagAst(ast);
+                        const ids = [...idSet];
+                        if (ids.length === 0) {
+                            res.json({ items: [], pagination: { page, limit, total: 0, totalPages: 0, sortBy, sortOrder } });
+                            return;
+                        }
+                        conditions.push(inArray(schema.media.id, ids));
+                    }
+                }
+            } catch {
+                res.status(400).json({ error: 'media.invalidTagExpr' });
+                return;
             }
         }
 
-        if (tagFilterIds !== null && tagFilterIds.length === 0) {
-            res.json({
-                items: [],
-                pagination: { page, limit, total: 0, totalPages: 0, sortBy, sortOrder }
-            });
-            return;
-        }
-        if (tagFilterIds !== null && tagFilterIds.length > 0) {
-            conditions.push(inArray(schema.media.id, tagFilterIds));
-        }
-
-        // 作者表达式筛选：?authorExpr=A&(B|C)|D
-        let authorFilterIds: string[] | null = null;
+        // 作者表达式筛选：?authorExpr=A&(B|C)|D  支持 ! 排除
         if (authorExpr) {
-            const ast = parseTagExpr(authorExpr);
-            if (ast) {
-                const idSet = await evaluateAuthorAst(ast);
-                authorFilterIds = [...idSet];
+            try {
+                const ast = parseExpr(authorExpr);
+                if (ast) {
+                    if (ast.type === 'not') {
+                        const idSet = await evaluateAuthorAst(ast.child);
+                        const ids = [...idSet];
+                        if (ids.length > 0) {
+                            conditions.push(notInArray(schema.media.id, ids));
+                        }
+                    } else {
+                        const idSet = await evaluateAuthorAst(ast);
+                        const ids = [...idSet];
+                        if (ids.length === 0) {
+                            res.json({ items: [], pagination: { page, limit, total: 0, totalPages: 0, sortBy, sortOrder } });
+                            return;
+                        }
+                        conditions.push(inArray(schema.media.id, ids));
+                    }
+                }
+            } catch {
+                res.status(400).json({ error: 'media.invalidAuthorExpr' });
+                return;
             }
-        }
-        if (authorFilterIds !== null && authorFilterIds.length === 0) {
-            res.json({
-                items: [],
-                pagination: { page, limit, total: 0, totalPages: 0, sortBy, sortOrder }
-            });
-            return;
-        }
-        if (authorFilterIds !== null && authorFilterIds.length > 0) {
-            conditions.push(inArray(schema.media.id, authorFilterIds));
-        }
-
-        // 兼容旧版单作者 ID 筛选
-        if (authorId && authorFilterIds === null) {
-            conditions.push(eq(schema.media.authorId, authorId));
         }
 
         if (uploaderId) {

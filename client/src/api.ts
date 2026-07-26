@@ -118,7 +118,6 @@ export const Api = {
             type?: string;
             search?: string;
             tags?: string;
-            authorId?: string;
             authorExpr?: string;
             uploaderId?: string;
             sortBy?: string;
@@ -132,7 +131,6 @@ export const Api = {
         if (params.search) url.searchParams.set('search', params.search);
         if (params.tags) url.searchParams.set('tags', params.tags);
         if (params.authorExpr) url.searchParams.set('authorExpr', params.authorExpr);
-        if (params.authorId) url.searchParams.set('authorId', params.authorId);
         if (params.uploaderId) url.searchParams.set('uploaderId', params.uploaderId);
         if (params.sortBy) url.searchParams.set('sortBy', params.sortBy);
         if (params.sortOrder) url.searchParams.set('sortOrder', params.sortOrder);
