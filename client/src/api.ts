@@ -148,7 +148,7 @@ export const Api = {
     uploadMedia(file: File) {
         const formData = new FormData();
         formData.append('file', file);
-        return request<{ message: string; media: Media }>('POST', '/media', formData, true);
+        return request<{ message: string; id: string }>('POST', '/media/upload', formData, true);
     },
 
     updateMedia(
@@ -161,6 +161,16 @@ export const Api = {
             tags?: string[];
             author?: string;
             source?: string;
+            fileName?: string;
+            filePath?: string;
+            fileSize?: number;
+            fileHash?: string | null;
+            mimeType?: string;
+            thumbPath?: string | null;
+            mediaInfo?: string | null;
+            sourceMeta?: string | null;
+            createdAt?: string;
+            updatedAt?: string;
         }
     ) {
         return request<{ message: string; media: Media }>('PUT', `/media/${id}`, data);

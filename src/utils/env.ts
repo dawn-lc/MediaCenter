@@ -141,6 +141,36 @@ export function prune<T>(data: T): Pruned<T> {
     }
     return data as Pruned<T>;
 }
+/** Type guard that always returns true — for use with pick() when any non-undefined value is acceptable */
+export const isPresent = <T = unknown>(_v: unknown): _v is T => true;
+
+/** Safely convert to number, returning null for nullish values */
+export const toNumberOrNull = (v: unknown): number | null =>
+    isNullOrUndefined(v) ? null : Number(v);
+
+/** Safely convert to string, returning null for non-string values */
+export const toStringOrNull = (v: unknown): string | null =>
+    isString(v) ? v : null;
+
+/**
+ * 创建一个 pick 辅助函数，用于从请求 body 中安全提取字段值。
+ * 仅当值 !== undefined 且通过 check 校验后，才写入 updates 对象。
+ * @param body - 请求体对象
+ * @param updates - 待写入的目标对象
+ * @returns pick(key, check, map?) 函数
+ */
+export function createPicker(
+    body: Record<string, unknown>,
+    updates: Record<string, unknown>,
+) {
+    return <T>(key: string, check: (v: unknown) => v is T, map?: (v: T) => unknown) => {
+        const v = body[key];
+        if (v !== undefined && check(v)) {
+            updates[key] = map ? map(v) : v;
+        }
+    };
+}
+
 export async function checkFileExists(filePath: string) {
     try {
         await access(filePath, constants.F_OK);

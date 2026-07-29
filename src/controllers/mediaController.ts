@@ -12,8 +12,10 @@ import { hasMinRole, ALL_ROLES, USER_ROLES } from '../utils/roles';
 import { parseExpr, evaluateExpr } from '../utils/exprParser';
 import type { ExprNode } from '../utils/exprParser';
 import { computeFileHash } from '../utils/hash';
+import { probeMedia, serializeMediaInfo, type MediaInfo } from '../utils/ffprobe';
+import { resolveBestMimeType } from '../utils/mimeType';
 import config from '../config';
-import { isString, isNumber, isArray, isNotEmpty, isNullOrUndefined, isUndefined, prune, checkFileExists } from '../utils/env';
+import { isString, isNumber, isArray, isNotEmpty, isPresent, isNullOrUndefined, isUndefined, toNumberOrNull, toStringOrNull, createPicker, prune, checkFileExists } from '../utils/env';
 
 // ========== 表达式求值器（标签 / 作者维度）==========
 
@@ -433,6 +435,7 @@ export async function getMedia(req: Request, res: Response): Promise<void> {
                 duration: schema.media.duration,
                 thumbPath: schema.media.thumbPath,
                 mediaInfo: schema.media.mediaInfo,
+                sourceMeta: schema.media.sourceMeta,
                 uploaderId: schema.media.uploaderId,
                 deletedAt: schema.media.deletedAt,
                 createdAt: schema.media.createdAt,
@@ -570,145 +573,210 @@ export async function refreshStreamToken(req: Request, res: Response): Promise<v
     }
 }
 
-/**
- * 上传媒体文件
- * POST /api/media
- */
-export async function createMedia(req: Request, res: Response): Promise<void> {
-    try {
-        const db = getDatabase();
-        const isAdmin = req.user?.role === 'admin';
-        const hasLocalPath = isString(req.body.filePath);
+// ========== 媒体记录创建（uploadMedia / createMedia 共享）==========
 
-        // 前置校验
-        if (hasLocalPath && !isAdmin) {
-            res.status(403).json({ error: 'media.forbiddenLocalPath' });
-            return;
-        }
-        if (!hasLocalPath && !req.file) {
+/** 检查文件是否已存在，是则返回 409 */
+async function checkDuplicate(fileHash: string | null): Promise<{ id: string; title: string } | null> {
+    if (!fileHash) return null;
+    const db = getDatabase();
+    const [row] = await db
+        .select({ id: schema.media.id, title: schema.media.title })
+        .from(schema.media)
+        .where(eq(schema.media.fileHash, fileHash))
+        .limit(1)
+        .execute();
+    return row ?? null;
+}
+
+/** 解析 uploaderId：API 令牌无用户 ID 时回退为首个管理员 */
+async function resolveUploaderId(req: Request): Promise<string> {
+    if (req.user!.id) return req.user!.id;
+    const db = getDatabase();
+    const [u] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.role, 'admin'))
+        .limit(1)
+        .execute();
+    return u!.id; // ensureDefaultUsers 保证管理员存在
+}
+
+/** 探测媒体文件，返回归一化后的 probe 结果；失败返回 null */
+async function probeMediaFile(
+    filePath: string,
+    currentMimeType: string
+): Promise<{ info: MediaInfo; bestMimeType: string; serialized: string } | null> {
+    const info = await probeMedia(filePath);
+    if (!info) return null;
+    return {
+        info,
+        bestMimeType: resolveBestMimeType(currentMimeType, info.videoCodec),
+        serialized: serializeMediaInfo(info)!
+    };
+}
+
+/** 探测媒体 → 写入 DB → 返回新记录的 id */
+async function createMediaRecord(
+    req: Request,
+    params: {
+        originalname: string;
+        filePath: string;
+        fileHash: string | null;
+        fileSize: number;
+        mimeType: string;
+        sourceMeta?: string | null;
+        id?: string;
+    }
+): Promise<string> {
+    const db = getDatabase();
+
+    const id = params.id ?? uuidv4();
+    const uploaderId = await resolveUploaderId(req);
+
+    const probe = await probeMediaFile(params.filePath, params.mimeType);
+    if (!probe) {
+        throw new Error('无法识别媒体类型');
+    }
+
+    await db
+        .insert(schema.media)
+        .values({
+            id,
+            title: basename(params.originalname, extname(params.originalname)).slice(0, config.maxTitleLength),
+            description: '',
+            fileName: params.originalname,
+            filePath: params.filePath,
+            fileHash: params.fileHash,
+            fileSize: params.fileSize,
+            duration: probe.info.duration,
+            mimeType: probe.bestMimeType,
+            mediaInfo: probe.serialized,
+            sourceMeta: params.sourceMeta ?? null,
+            uploaderId,
+            minRole: 'owner'
+        } satisfies typeof schema.media.$inferInsert)
+        .execute();
+
+    return id;
+}
+
+/** 探测媒体文件并更新数据库记录（探针失败时静默返回原值） */
+export async function updateMediaInfo(
+    mediaId: string,
+    filePath: string,
+    currentMimeType: string
+): Promise<{ duration: number | null; mimeType: string; mediaInfo: string | null }> {
+    const probe = await probeMediaFile(filePath, currentMimeType);
+    if (!probe) {
+        return { duration: null, mimeType: currentMimeType, mediaInfo: null };
+    }
+
+    const db = getDatabase();
+    await db
+        .update(schema.media)
+        .set({
+            duration: probe.info.duration,
+            mimeType: probe.bestMimeType,
+            mediaInfo: probe.serialized
+        })
+        .where(eq(schema.media.id, mediaId))
+        .execute();
+
+    return { duration: probe.info.duration, mimeType: probe.bestMimeType, mediaInfo: probe.serialized };
+}
+
+/**
+ * 上传媒体文件（Multer multipart/form-data）
+ * POST /api/media/upload
+ */
+export async function uploadMedia(req: Request, res: Response): Promise<void> {
+    try {
+        if (!req.file) {
             res.status(400).json({ error: 'media.noFile' });
             return;
         }
 
-        let filePath: string;
-        let originalname: string;
-        let size: number;
-        let mimetype: string;
-        let fileHash: string | null;
-        let sourceMeta: string | null = null;
-        let isMulterUpload = false;
+        const filePath = req.file.path;
+        const fileHash = await computeFileHash(filePath);
 
-        if (hasLocalPath) {
-            // ── 管理员指定本地路径 ──
-            filePath = req.body.filePath!;
-
-            // 优先使用请求体传入的 mimeType，否则按后缀名推断
-            if (isString(req.body.mimeType)) {
-                mimetype = req.body.mimeType;
-            } else {
-                const detected = mime.lookup(filePath) || 'application/octet-stream';
-                if (!isSupportedMimeType(detected)) {
-                    res.status(415).json({ error: `不支持的媒体类型: ${detected}` });
-                    return;
-                }
-                mimetype = detected;
-            }
-            originalname = basename(filePath);
-            size = isNumber(req.body.fileSize) ? req.body.fileSize! : 0;
-            // 文件可能尚未就绪（aria2 下载中），hash 非必需
-            fileHash = isString(req.body.fileHash) ? req.body.fileHash : null;
-            // 外部导入可能附带原始元数据（如 iwara API 返回），存入独立列避免被 probe 覆盖
-            sourceMeta = isString(req.body.sourceMeta) ? req.body.sourceMeta : null;
-        } else {
-            // ── 普通上传（Multer） ──
-            isMulterUpload = true;
-            originalname = req.file!.originalname;
-            size = req.file!.size;
-            mimetype = req.file!.mimetype;
-            filePath = req.file!.path;
-            fileHash = await computeFileHash(filePath);
-        }
-
-        // 检查重复文件（仅在有 hash 时）
-        if (fileHash) {
-            const existing = await db.select({ id: schema.media.id, title: schema.media.title }).from(schema.media).where(eq(schema.media.fileHash, fileHash)).limit(1).execute();
-            if (existing[0]) {
-                if (isMulterUpload) {
-                    try { deleteFile(filePath); } catch { /* ignore */ }
-                }
-                res.status(409).json({
-                    error: 'media.duplicateFile',
-                    existingId: existing[0].id,
-                    existingTitle: existing[0].title
-                });
-                return;
-            }
+        // 检查重复（在 rename 前，以便清理临时文件）
+        const dup = await checkDuplicate(fileHash);
+        if (dup) {
+            try { deleteFile(filePath); } catch { /* ignore */ }
+            res.status(409).json({ error: 'media.duplicateFile', existingId: dup.id, existingTitle: dup.title });
+            return;
         }
 
         const id = uuidv4();
         const ext = extname(filePath);
+        const finalPath = join(dirname(filePath), `${id}${ext}`);
+        await rename(filePath, finalPath);
 
-        let finalPath: string;
-        if (isMulterUpload) {
-            // 将 Multer 随机命名的文件重命名为 DB 主键名
-            finalPath = join(dirname(filePath), `${id}${ext}`);
-            await rename(filePath, finalPath);
-        } else {
-            // 管理员本地路径：直接引用原文件，不复制
-            finalPath = filePath;
-        }
-
-        // API 令牌没有用户 ID，回退为数据库中的管理员
-        let uploaderId = req.user!.id;
-        if (!uploaderId) {
-            const [u] = await db
-                .select({ id: schema.users.id })
-                .from(schema.users)
-                .where(eq(schema.users.role, 'admin'))
-                .limit(1)
-                .execute();
-            uploaderId = u!.id; // 启动时 ensureDefaultUsers 会创建管理员
-        }
-
-        await db
-            .insert(schema.media)
-            .values({
-                id,
-                title: basename(originalname, extname(originalname)).slice(0, config.maxTitleLength),
-                description: '',
-                fileName: originalname,
-                filePath: finalPath,
-                fileHash,
-                fileSize: size,
-                mimeType: mimetype,
-                uploaderId,
-                minRole: 'owner',
-                sourceMeta
-            } satisfies typeof schema.media.$inferInsert)
-            .execute();
-
-        // 媒体信息在首次流请求时阻塞提取（确保文件完整）
-
-        res.status(201).json({
-            message: 'media.uploadSuccess',
-            media: {
-                id,
-                title: basename(originalname, extname(originalname)).slice(0, config.maxTitleLength),
-                fileName: originalname,
-                fileSize: size,
-                mimeType: mimetype,
-                uploaderName: req.user!.username
-            }
+        await createMediaRecord(req, {
+            originalname: req.file.originalname,
+            filePath: finalPath,
+            fileHash,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            id
         });
+
+        res.status(201).json({ message: 'media.uploadSuccess', id });
     } catch (err) {
         console.error('[Media] 上传失败:', err);
-        const message = err instanceof Error ? err.message : 'error.internal';
-        const forbidden = ['media.forbiddenTag', 'media.forbiddenAuthor', 'media.forbiddenLocalPath'];
-        if (forbidden.includes(message)) {
-            res.status(403).json({ error: message });
-        } else {
-            res.status(500).json({ error: 'error.internal' });
+        res.status(500).json({ error: 'error.internal' });
+    }
+}
+
+/**
+ * 导入本地媒体文件（管理员指定服务器本地路径）
+ * POST /api/media
+ */
+export async function createMedia(req: Request, res: Response): Promise<void> {
+    try {
+        if (req.user?.role !== 'admin') {
+            res.status(403).json({ error: 'media.forbiddenLocalPath' });
+            return;
         }
+
+        const filePath = req.body.filePath;
+        if (!isString(filePath)) {
+            res.status(400).json({ error: 'media.noFilePath' });
+            return;
+        }
+
+        let mimeType: string;
+        if (isString(req.body.mimeType)) {
+            mimeType = req.body.mimeType;
+        } else {
+            const detected = mime.lookup(filePath) || 'application/octet-stream';
+            if (!isSupportedMimeType(detected)) {
+                res.status(415).json({ error: `不支持的媒体类型: ${detected}` });
+                return;
+            }
+            mimeType = detected;
+        }
+
+        const fileHash = isString(req.body.fileHash) ? req.body.fileHash : null;
+        const dup = await checkDuplicate(fileHash);
+        if (dup) {
+            res.status(409).json({ error: 'media.duplicateFile', existingId: dup.id, existingTitle: dup.title });
+            return;
+        }
+
+        const id = await createMediaRecord(req, {
+            originalname: basename(filePath),
+            filePath,
+            fileHash,
+            fileSize: isNumber(req.body.fileSize) ? req.body.fileSize! : 0,
+            mimeType,
+            sourceMeta: isString(req.body.sourceMeta) ? req.body.sourceMeta : null
+        });
+
+        res.status(201).json({ message: 'media.importSuccess', id });
+    } catch (err) {
+        console.error('[Media] 导入本地文件失败:', err);
+        res.status(500).json({ error: 'error.internal' });
     }
 }
 
@@ -724,7 +792,17 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             return;
         }
         const db = getDatabase();
-        const existing = await db.select({ uploaderId: schema.media.uploaderId }).from(schema.media).where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined)).limit(1).execute();
+        // 查询现有记录（需要 filePath 和 mimeType 用于更新前 probe）
+        const existing = await db
+            .select({
+                uploaderId: schema.media.uploaderId,
+                filePath: schema.media.filePath,
+                mimeType: schema.media.mimeType
+            })
+            .from(schema.media)
+            .where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined))
+            .limit(1)
+            .execute();
         const mediaRecord = existing[0];
         if (!mediaRecord) {
             res.status(404).json({ error: 'media.notFound' });
@@ -737,20 +815,16 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
         }
 
         const body = req.body as Record<string, unknown>;
-        const {
-            title, description, minRole, duration, mediaInfo, source,
-            author: authorName, tags: tagNames,
-            fileName: bodyFn, filePath: bodyFp, fileSize: bodyFs,
-            fileHash: bodyFh, mimeType: bodyMt, thumbPath: bodyTp,
-            uploaderId: bodyUid, createdAt: bodyCa, updatedAt: bodyUa
-        } = body;
-
         const isAdmin = req.user!.role === 'admin';
         const updates: Record<string, unknown> = {};
 
+        const pick = createPicker(body, updates);
+
         // ── 通用字段（管理员/上传者均可修改）──
-        if (isString(title)) updates.title = title.slice(0, config.maxTitleLength);
-        if (isString(description)) updates.description = description.slice(0, config.maxDescLength);
+        pick('title', isString, (v) => v.slice(0, config.maxTitleLength));
+        pick('description', isString, (v) => v.slice(0, config.maxDescLength));
+
+        const minRole = body.minRole;
         if (isString(minRole)) {
             const allowed = isAdmin ? ALL_ROLES : USER_ROLES;
             if (allowed.some((r) => r === minRole)) updates.minRole = minRole;
@@ -758,44 +832,58 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
 
         // ── 管理员专属字段 ──
         if (isAdmin) {
-            if (!isUndefined(bodyFn)) updates.fileName = bodyFn;
-            if (!isNullOrUndefined(bodyFp) && isString(bodyFp)) {
-                if (await checkFileExists(bodyFp)) {
-                    updates.filePath = bodyFp;
-                }
-            }
-            if (!isUndefined(bodyMt)) updates.mimeType = bodyMt;
-            if (!isUndefined(bodyUid)) updates.uploaderId = bodyUid;
-            if (!isUndefined(bodyCa)) updates.createdAt = bodyCa;
-            if (!isUndefined(bodyUa)) updates.updatedAt = bodyUa;
+            pick('fileName', isString);
+            pick('mimeType', isString);
+            pick('uploaderId', isString);
+            pick('createdAt', isString);
+            pick('updatedAt', isString);
+            pick('source', isString);
+            pick('sourceMeta', isString);
+            pick('mediaInfo', isString);
+            pick('fileSize', isPresent, (v) => Number(v));
+            pick('fileHash', isPresent, toStringOrNull);
+            pick('thumbPath', isPresent, toStringOrNull);
+            pick('duration', isPresent, toNumberOrNull);
 
-            if (!isUndefined(bodyFs)) updates.fileSize = Number(bodyFs);
-            if (!isUndefined(bodyFh)) updates.fileHash = isString(bodyFh) ? bodyFh : null;
-            if (!isUndefined(bodyTp)) updates.thumbPath = isString(bodyTp) ? bodyTp : null;
-            if (!isUndefined(mediaInfo)) updates.mediaInfo = isString(mediaInfo) ? mediaInfo : null;
-            if (!isUndefined(source)) updates.source = isString(source) ? source : null;
-            if (!isUndefined(req.body.sourceMeta)) updates.sourceMeta = isString(req.body.sourceMeta) ? req.body.sourceMeta : null;
-            if (!isUndefined(duration)) updates.duration = isNullOrUndefined(duration) ? null : Number(duration);
-            if (!isUndefined(authorName)) updates.authorId = await resolveAuthorId(isString(authorName) ? authorName : undefined, req.user!.role!);
+            // filePath 需额外检查文件是否存在
+            const filePath = body.filePath;
+            if (isString(filePath) && (await checkFileExists(filePath))) {
+                updates.filePath = filePath;
+            }
+
+            // author 需异步解析为 authorId
+            const author = body.author;
+            if (isString(author)) {
+                updates.authorId = await resolveAuthorId(author, req.user!.role!);
+            }
         }
 
-        const hasTagUpdate = isArray(tagNames);
+        const hasTagUpdate = isArray(body.tags);
 
         if (Object.keys(updates).length === 0 && !hasTagUpdate) {
             res.status(400).json({ error: 'media.noUpdate' });
             return;
         }
 
+        // 探测媒体信息并并入 updates（先 probe，再一次 DB 写入）
+        const targetFilePath = (updates.filePath as string) ?? mediaRecord.filePath;
+        const targetMimeType = (updates.mimeType as string) ?? mediaRecord.mimeType;
+        const probe = await probeMediaFile(targetFilePath, targetMimeType);
+        if (probe) {
+            updates.duration = probe.info.duration;
+            updates.mimeType = probe.bestMimeType;
+            updates.mediaInfo = probe.serialized;
+        }
+
         // 执行更新
         if (Object.keys(updates).length > 0) {
-            // 管理员已提供 updatedAt 则以管理员为准，否则服务器自动设置
             if (isUndefined(updates.updatedAt)) updates.updatedAt = new Date().toISOString();
             await db.update(schema.media).set(updates).where(eq(schema.media.id, id)).execute();
         }
 
         // 处理标签（上传者也可以管理标签）
         if (hasTagUpdate) {
-            await syncMediaTags(db, id, tagNames, req.user!.role!);
+            await syncMediaTags(db, id, body.tags as string[], req.user!.role!);
         }
 
         // 查询更新后的完整记录

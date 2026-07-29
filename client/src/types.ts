@@ -25,6 +25,7 @@ export interface Media {
     thumbUrl?: string | null;
     /** 来源 URL */
     source?: string | null;
+    sourceMeta?: string | null;
     /** 作者 */
     author?: { id: string; name: string; altNames: string[]; urls: string[] } | null;
     uploaderId: string;

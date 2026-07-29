@@ -39,7 +39,7 @@ export interface MediaInfo {
  * @param filePath - 文件绝对路径
  * @returns 解析后的媒体信息，失败返回 null
  */
-export async function probeMedia(filePath: string): Promise<MediaInfo | null> {
+export async function probeMedia(filePath: string): Promise<MediaInfo | undefined> {
     try {
         const { stdout } = await execFileAsync(
             'ffprobe',
@@ -99,7 +99,6 @@ export async function probeMedia(filePath: string): Promise<MediaInfo | null> {
         };
     } catch (err) {
         console.warn('[ffprobe] 探测失败:', filePath, err instanceof Error ? err.message : String(err));
-        return null;
     }
 }
 

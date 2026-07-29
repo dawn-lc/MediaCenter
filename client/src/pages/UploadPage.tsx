@@ -48,7 +48,7 @@ export default function UploadPage() {
         formData.append('file', file);
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', apiUrl('/media'));
+        xhr.open('POST', apiUrl('/media/upload'));
 
         const token = localStorage.getItem(STORAGE_PREFIX + 'auth');
         if (token) {
@@ -70,7 +70,7 @@ export default function UploadPage() {
                 const data = JSON.parse(xhr.responseText);
                 if (xhr.status >= 200 && xhr.status < 300) {
                     toast.success(t('media.uploadSuccess'));
-                    navigate('/edit/' + data.media.id);
+                    navigate('/edit/' + data.id);
                 } else {
                     const raw = data?.error || 'common.loadFailed';
                     const msg = raw.includes('.') && i18n.exists(raw) ? t(raw) : raw;

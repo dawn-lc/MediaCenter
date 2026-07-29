@@ -99,9 +99,10 @@ const config = {
     defaultExpiresSeconds: 3 * 60,
 
     /** 标签表达式最大长度 */
-    maxExprLength: 200,
+    maxExprLength: 512,
     /** 标签表达式最大递归深度 */
-    maxDepth: 20
+    maxDepth: 32,
+
 } as const;
 
 export default config;

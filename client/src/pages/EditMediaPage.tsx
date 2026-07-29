@@ -29,6 +29,17 @@ export default function EditMediaPage() {
     const [author, setAuthor] = useState('');
     const [source, setSource] = useState('');
     const [minRole, setMinRole] = useState('guest');
+    const [fileName, setFileName] = useState('');
+    const [filePath, setFilePath] = useState('');
+    const [fileSize, setFileSize] = useState('');
+    const [fileHash, setFileHash] = useState('');
+    const [mimeType, setMimeType] = useState('');
+    const [thumbPath, setThumbPath] = useState('');
+    const [duration, setDuration] = useState('');
+    const [mediaInfo, setMediaInfo] = useState('');
+    const [sourceMeta, setSourceMeta] = useState('');
+    const [createdAt, setCreatedAt] = useState('');
+    const [updatedAt, setUpdatedAt] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -42,6 +53,17 @@ export default function EditMediaPage() {
                 setAuthor(data.media.author?.name || '');
                 setSource(data.media.source || '');
                 setMinRole(data.media.minRole || 'guest');
+                setFileName(data.media.fileName || '');
+                setFilePath(data.media.filePath || '');
+                setFileSize(String(data.media.fileSize ?? ''));
+                setFileHash(data.media.fileHash || '');
+                setMimeType(data.media.mimeType || '');
+                setThumbPath(data.media.thumbPath || '');
+                setDuration(data.media.duration != null ? String(data.media.duration) : '');
+                setMediaInfo(data.media.mediaInfo || '');
+                setSourceMeta(data.media.sourceMeta || '');
+                setCreatedAt(data.media.createdAt ? new Date(data.media.createdAt).toISOString().slice(0, 16) : '');
+                setUpdatedAt('');
             })
             .catch((err: Error) => {
                 if (err instanceof ApiError && err.status === 403) {
@@ -63,14 +85,28 @@ export default function EditMediaPage() {
         setSaving(true);
         setError('');
         try {
-            await Api.updateMedia(id, {
+            const body: Parameters<typeof Api.updateMedia>[1] = {
                 title,
                 description,
                 minRole,
                 tags,
                 author: author || undefined,
                 source: source || undefined
-            });
+            };
+            if (auth.isAdmin) {
+                if (fileName) body.fileName = fileName;
+                if (filePath) body.filePath = filePath;
+                if (fileSize) body.fileSize = Number(fileSize);
+                if (fileHash !== undefined) body.fileHash = fileHash || null;
+                if (mimeType) body.mimeType = mimeType;
+                if (thumbPath !== undefined) body.thumbPath = thumbPath || null;
+                if (duration) body.duration = Number(duration);
+                if (mediaInfo !== undefined) body.mediaInfo = mediaInfo || null;
+                if (sourceMeta !== undefined) body.sourceMeta = sourceMeta || null;
+                if (createdAt) body.createdAt = new Date(createdAt).toISOString();
+                if (updatedAt) body.updatedAt = new Date(updatedAt).toISOString();
+            }
+            await Api.updateMedia(id, body);
             toast.success(t('player.updateSuccess'));
             navigate('/player/' + id);
         } catch (err: unknown) {
@@ -160,7 +196,62 @@ export default function EditMediaPage() {
                     <input className="form-input" value={source} onChange={(e) => setSource(e.target.value)} placeholder={t('player.sourcePlaceholder')} />
                 </div>
 
-                {error && <div className="form-error">⚠️ {error}</div>}
+                {auth.isAdmin && (
+                    <>
+                        <div className="form-group">
+                            <label>{t('player.fileName')}</label>
+                            <input className="form-input" value={fileName} onChange={e => setFileName(e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>{t('player.filePath')}</label>
+                            <input className="form-input" value={filePath} onChange={e => setFilePath(e.target.value)} />
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>{t('player.fileSize')}</label>
+                                <input className="form-input" type="number" value={fileSize} onChange={e => setFileSize(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>{t('player.mimeType')}</label>
+                                <input className="form-input" value={mimeType} onChange={e => setMimeType(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>{t('player.fileHash')}</label>
+                            <input className="form-input" value={fileHash} onChange={e => setFileHash(e.target.value)} />
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>{t('player.thumbPath')}</label>
+                                <input className="form-input" value={thumbPath} onChange={e => setThumbPath(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>{t('meta.durationLabel')}</label>
+                                <input className="form-input" type="number" step="0.1" value={duration} onChange={e => setDuration(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>{t('player.mediaInfo')}</label>
+                            <textarea className="form-input form-textarea" value={mediaInfo} onChange={e => setMediaInfo(e.target.value)} rows={4} />
+                        </div>
+                        <div className="form-group">
+                            <label>{t('player.sourceMeta')}</label>
+                            <textarea className="form-input form-textarea" value={sourceMeta} onChange={e => setSourceMeta(e.target.value)} rows={3} />
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>{t('player.createdAt')}</label>
+                                <input className="form-input" type="datetime-local" value={createdAt} onChange={e => setCreatedAt(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>{t('player.updatedAt')}</label>
+                                <input className="form-input" type="datetime-local" value={updatedAt} onChange={e => setUpdatedAt(e.target.value)} />
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {error && <div className="form-error">{error}</div>}
 
                 <div className="btn-row">
                     <button className="btn btn-secondary" onClick={() => navigate('/player/' + id)}>

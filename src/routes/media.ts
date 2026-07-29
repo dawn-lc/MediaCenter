@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listMedia, getMedia, refreshStreamToken, createMedia, updateMedia, deleteMedia, restoreMedia } from '../controllers/mediaController';
+import { listMedia, getMedia, refreshStreamToken, uploadMedia, createMedia, updateMedia, deleteMedia, restoreMedia } from '../controllers/mediaController';
 import { authenticate, requireAuth } from '../middleware/auth';
 import upload from '../middleware/upload';
 
@@ -14,8 +14,11 @@ router.get('/:id', authenticate, getMedia);
 // 刷新流媒体签名令牌（前端调用）
 router.get('/:id/stream-token', authenticate, refreshStreamToken);
 
-// 上传媒体文件（需登录）
-router.post('/', authenticate, requireAuth, upload.single('file'), createMedia);
+// 上传媒体文件（需登录，multipart/form-data）
+router.post('/upload', authenticate, requireAuth, upload.single('file'), uploadMedia);
+
+// 导入本地媒体文件（仅管理员，JSON body）
+router.post('/', authenticate, requireAuth, createMedia);
 
 // 更新媒体元数据（需登录，仅上传者或管理员）
 router.put('/:id', authenticate, requireAuth, updateMedia);

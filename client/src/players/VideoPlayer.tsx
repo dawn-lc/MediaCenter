@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Api } from '../api';
 import type { Media } from '../types';
 import { usePlaylistStore } from '../stores/playlist';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function VideoPlayer({ media }: Props) {
+    const { t } = useTranslation();
     const playlist = usePlaylistStore();
     const playerSettings = usePlayerSettings();
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -48,19 +50,42 @@ export default function VideoPlayer({ media }: Props) {
                 // 应用持久化的音量
                 player.volume(savedVolume);
 
-                // 处理媒体播放错误
-                player.on('error', () => {
+                // 视频全屏/退出时通知 PWAProvider 释放/恢复方向锁
+                player.on('fullscreenchange', () => {
+                    const event = player.isFullscreen() ? 'vjs-fullscreen-enter' : 'vjs-fullscreen-exit';
+                    document.dispatchEvent(new CustomEvent(event));
+                });
+
+                async function refreshStream(): Promise<boolean> {
+                    try {
+                        const data = await Api.refreshStreamToken(media.id);
+                        if (disposed || !videoRef.current) return false;
+                        const newUrl = resolveApiUrl(data.streamUrl);
+                        const video = videoRef.current;
+                        if (video.src.endsWith(newUrl)) return false;
+                        const ct = video.currentTime;
+                        const wasPaused = video.paused;
+                        video.src = newUrl;
+                        video.currentTime = ct;
+                        if (!wasPaused) video.play().catch(() => { });
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                }
+
+                // 处理媒体播放错误：先尝试刷新签名重试，仍失败才报错
+                player.on('error', async () => {
                     const err = player.error();
                     if (!err) return;
-                    // MediaError.code: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
-                    const errMsg =
-                        err.code === 4
-                            ? `不支持此媒体格式 (${media.mimeType})，该文件可能包含浏览器无法解码的编解码器`
-                            : err.code === 3
-                                ? '媒体解码失败，文件可能已损坏'
-                                : err.code === 2
-                                    ? '网络错误，无法加载媒体文件'
-                                    : `播放错误 (code: ${err.code}): ${err.message}`;
+                    if (err.code !== 3 && await refreshStream()) return;
+                    let errMsg: string;
+                    switch (err.code) {
+                        case 4: errMsg = t('player.errorFormatUnsupported', { mimeType: media.mimeType }); break;
+                        case 3: errMsg = t('player.errorDecodeFailed'); break;
+                        case 2: errMsg = t('player.errorNetwork'); break;
+                        default: errMsg = t('player.errorUnknown', { code: err.code, message: err.message || '' }); break;
+                    }
                     console.error('[VideoPlayer] 播放错误:', errMsg, err);
                 });
 
@@ -127,23 +152,6 @@ export default function VideoPlayer({ media }: Props) {
                         refreshStream();
                     }, DEBOUNCE_MS);
                 });
-
-                async function refreshStream() {
-                    try {
-                        const data = await Api.refreshStreamToken(media.id);
-                        if (disposed || !videoRef.current) return;
-                        const newUrl = resolveApiUrl(data.streamUrl);
-                        const video = videoRef.current;
-                        if (video.src.endsWith(newUrl)) return;
-                        const ct = video.currentTime;
-                        const wasPaused = video.paused;
-                        video.src = newUrl;
-                        video.currentTime = ct;
-                        if (!wasPaused) video.play().catch(() => { });
-                    } catch {
-                        /* 刷新失败继续用旧源 */
-                    }
-                }
             });
         });
 

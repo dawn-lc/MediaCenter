@@ -7,29 +7,8 @@ import send from 'send';
 import { getDatabase, schema } from '../db/index';
 import { hasMinRole } from '../utils/roles';
 import { isString } from '../utils/env';
-import { probeMedia, serializeMediaInfo } from '../utils/ffprobe';
-import { resolveBestMimeType } from '../utils/mimeType';
+import { updateMediaInfo } from './mediaController';
 import { stat } from 'fs/promises';
-
-/** 首次访问时阻塞 probe（文件可能刚导入不完整），结果缓存到 DB */
-async function ensureProbed(db: ReturnType<typeof getDatabase>, mediaId: string, filePath: string, currentMimeType: string): Promise<string> {
-    const info = await probeMedia(filePath);
-    if (!info) return currentMimeType;
-
-    const bestMimeType = resolveBestMimeType(currentMimeType, info.videoCodec);
-    await db
-        .update(schema.media)
-        .set({
-            duration: info.duration,
-            mimeType: bestMimeType,
-            mediaInfo: serializeMediaInfo(info),
-        })
-        .where(eq(schema.media.id, mediaId))
-        .execute()
-        .catch(() => { /* 非关键 */ });
-
-    return bestMimeType;
-}
 
 /**
  * 流式传输媒体文件
@@ -99,10 +78,11 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // 首次访问时阻塞 probe，确保文件完整 + MIME 归一化
+        // 首次访问时阻塞 probe（已有 mediaInfo 则跳过）
         let mimeType = mediaRecord.mimeType;
         if (!mediaRecord.mediaInfo) {
-            mimeType = await ensureProbed(db, id, filePath, mimeType);
+            const updated = await updateMediaInfo(id, filePath, mimeType);
+            mimeType = updated.mimeType;
         }
 
         send(req, filePath, {

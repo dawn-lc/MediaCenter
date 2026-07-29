@@ -21,7 +21,7 @@ export default defineConfig({
                 background_color: '#0f0f1a',
                 display: 'standalone',
                 display_override: ['window-controls-overlay', 'standalone'],
-                orientation: 'any',
+                orientation: 'portrait',
                 start_url: '/',
                 scope: '/',
                 lang: 'zh-CN',
