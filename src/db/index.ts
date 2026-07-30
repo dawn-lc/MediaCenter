@@ -73,7 +73,11 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
             u.searchParams.set('options', '-c timezone=UTC');
             return u.href;
         })(),
-        max: 64
+        max: config.dbPoolSize,
+        // 闲置 30s 断开，防止连接堆积
+        idleTimeoutMillis: 30_000,
+        // 连接最大存活时间，避免长时间连接被 PGBouncer 等中间件断开
+        maxLifetimeSeconds: 60 * 30,
     });
 
     db = drizzle({ client: pool });

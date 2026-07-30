@@ -63,6 +63,8 @@ const config = {
     jwtExpiresIn: '7d' as const,
     apiToken: process.env.API_TOKEN, // 静态 API 令牌，不设置则禁用
     databaseUrl: process.env.DATABASE_URL!,
+    /** 数据库连接池上限（默认 16，单容器实例建议 8~16） */
+    dbPoolSize: parseInt(process.env.DB_POOL_SIZE || '16', 10),
     uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR!),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '34359738368', 10), // 32GB
 

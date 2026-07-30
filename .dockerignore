@@ -11,3 +11,7 @@ Thumbs.db
 .idea/
 uploads/
 logs/
+coverage/
+Dockerfile*
+docker-compose*
+*.tsbuildinfo

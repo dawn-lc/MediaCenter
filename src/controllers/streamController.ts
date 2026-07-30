@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { existsSync } from 'fs';
 import { eq, and, isNull } from 'drizzle-orm';
 import { validate } from 'uuid';
 import mime from 'mime-types';
@@ -8,7 +7,7 @@ import { getDatabase, schema } from '../db/index';
 import { hasMinRole } from '../utils/roles';
 import { isString } from '../utils/env';
 import { updateMediaInfo } from './mediaController';
-import { stat } from 'fs/promises';
+import { stat, access } from 'fs/promises';
 
 /**
  * 流式传输媒体文件
@@ -73,7 +72,7 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
 
         const filePath = mediaRecord.filePath;
 
-        if (!existsSync(filePath)) {
+        try { await access(filePath); } catch {
             res.status(404).json({ error: 'media.fileNotFound' });
             return;
         }
@@ -151,7 +150,7 @@ export async function downloadMedia(req: Request, res: Response): Promise<void> 
         }
 
         const filePath = mediaRecord.filePath;
-        if (!existsSync(filePath)) {
+        try { await access(filePath); } catch {
             res.status(404).json({ error: 'media.fileNotFound' });
             return;
         }
@@ -208,17 +207,17 @@ export async function serveThumbnail(req: Request, res: Response): Promise<void>
         }
 
         const filePath = mediaRecord.thumbPath;
-        if (!existsSync(filePath)) {
+        try { await access(filePath); } catch {
             res.status(404).json({ error: 'media.fileNotFound' });
             return;
         }
 
         const mimeType = mime.lookup(filePath) || 'image/jpeg';
 
-        send(req, filePath, { etag: false, dotfiles: 'deny', maxAge: '1d' })
+        send(req, filePath, { etag: false, dotfiles: 'deny', maxAge: '1y' })
             .on('headers', (res) => {
                 res.setHeader('Content-Type', mimeType);
-                res.setHeader('Cache-Control', 'public, max-age=86400');
+                res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
             })
             .on('error', (err) => {
                 console.error('[Thumbnail] 读取错误:', err);
