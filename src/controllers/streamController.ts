@@ -7,7 +7,7 @@ import { getDatabase, schema } from '../db/index';
 import { hasMinRole } from '../utils/roles';
 import { isString } from '../utils/env';
 import { updateMediaInfo } from './mediaController';
-import { stat, access } from 'fs/promises';
+import { access } from 'fs/promises';
 
 /**
  * 流式传输媒体文件
@@ -44,18 +44,6 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
         if (!mediaRecord) {
             res.status(404).json({ error: 'media.notFound' });
             return;
-        }
-
-        if (mediaRecord.fileSize === 0) {
-            const fileInfo = await stat(mediaRecord.filePath);
-            await db
-                .update(schema.media)
-                .set({
-                    fileSize: fileInfo.size
-                })
-                .where(eq(schema.media.id, mediaRecord.id))
-                .execute()
-                .catch(() => { /* 非关键 */ });
         }
 
         // 权限检查

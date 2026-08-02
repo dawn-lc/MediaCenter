@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
-import { sql, eq } from 'drizzle-orm';
+import { sql, eq, like, count, desc } from 'drizzle-orm';
+import { validate } from 'uuid';
 import { getDatabase, schema, ensureDefaultUsers, syncSchemaInternal } from '../db/index';
 import { isString } from '../utils/env';
 
@@ -118,6 +119,110 @@ export async function toggleBan(req: Request, res: Response): Promise<void> {
         });
     } catch (err) {
         console.error('[Admin] 切换封禁状态失败:', err);
+        res.status(500).json({ error: 'error.internal' });
+    }
+}
+
+/**
+ * 管理员：获取所有用户列表
+ * GET /api/admin/users
+ */
+export async function listUsers(req: Request, res: Response): Promise<void> {
+    try {
+        const db = getDatabase();
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+        const offset = (page - 1) * limit;
+        const search = (req.query.search as string)?.trim();
+
+        const where = search ? like(schema.users.username, `%${search}%`) : undefined;
+
+        const [countResult] = await db
+            .select({ total: count() })
+            .from(schema.users)
+            .where(where)
+            .execute();
+        const total = countResult?.total ?? 0;
+
+        const users = await db
+            .select({
+                id: schema.users.id,
+                username: schema.users.username,
+                role: schema.users.role,
+                banned: schema.users.banned,
+                createdAt: schema.users.createdAt,
+                updatedAt: schema.users.updatedAt
+            })
+            .from(schema.users)
+            .where(where)
+            .orderBy(desc(schema.users.createdAt))
+            .limit(limit)
+            .offset(offset)
+            .execute();
+
+        res.json({
+            users,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (err) {
+        console.error('[Admin] 获取用户列表失败:', err);
+        res.status(500).json({ error: 'error.internal' });
+    }
+}
+
+/**
+ * 管理员：更新用户角色
+ * PUT /api/admin/users/:id/role
+ */
+export async function updateUserRole(req: Request, res: Response): Promise<void> {
+    try {
+        const id = req.params.id;
+        if (!isString(id) || !validate(id)) {
+            res.status(404).json({ error: 'auth.userNotFound' });
+            return;
+        }
+
+        const { role } = req.body;
+        if (!isString(role)) {
+            res.status(400).json({ error: 'error.invalidRole' });
+            return;
+        }
+        const validRoles = ['guest', 'user', 'admin'];
+
+        if (!validRoles.includes(role)) {
+            res.status(400).json({ error: 'error.invalidRole' });
+            return;
+        }
+
+        const db = getDatabase();
+
+        const existing = await db.select({ id: schema.users.id, username: schema.users.username }).from(schema.users).where(eq(schema.users.id, id)).limit(1).execute();
+
+        const user = existing[0];
+        if (!user) {
+            res.status(404).json({ error: 'auth.userNotFound' });
+            return;
+        }
+
+        // 不能修改自己的角色
+        if (user.id === req.user!.id) {
+            res.status(400).json({ error: 'error.cannotSelfChange' });
+            return;
+        }
+
+        await db.update(schema.users).set({ role, updatedAt: new Date().toISOString() }).where(eq(schema.users.id, id)).execute();
+
+        res.json({
+            message: 'admin.roleUpdated',
+            user: { id: user.id, username: user.username, role }
+        });
+    } catch (err) {
+        console.error('[Admin] 更新用户角色失败:', err);
         res.status(500).json({ error: 'error.internal' });
     }
 }

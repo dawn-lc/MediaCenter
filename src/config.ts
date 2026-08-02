@@ -65,6 +65,34 @@ const config = {
     databaseUrl: process.env.DATABASE_URL!,
     /** 数据库连接池上限（默认 16，单容器实例建议 8~16） */
     dbPoolSize: parseInt(process.env.DB_POOL_SIZE || '16', 10),
+    /**
+     * 语义搜索开关：通用 OpenAI 兼容嵌入接口（POST {base}/embeddings）。
+     * 仅当配置 EMBEDDING_BASE_URL 后才启用向量语义搜索；未配置为 null → relevance 排序回退 pg_trgm 原实现。
+     * 兼容任意 OpenAI 兼容服务：Ollama(http://host:11434/v1)、OpenAI、vLLM、LM Studio 等。
+     */
+    embeddingBaseUrl: process.env.EMBEDDING_BASE_URL || null,
+    /** 嵌入模型名 */
+    embeddingModel: process.env.EMBEDDING_MODEL || 'qwen3-embedding:0.6b',
+    /**
+     * 嵌入输出维度(默认 1024, 与 media.embedding vector(1024) 一致)。
+     * 当模型输出维度 > 该值时按 Matryoshka(MRL) 规则截断前 N 维 —— Qwen3-Embedding-4B/8B
+     * 原生输出 2560/4096 维但支持 MRL 任意维度, 截断后仍保持检索质量且兼容现有 schema。
+     * 设为 0 则不做截断(全维度), 需自行保证与 schema 维度一致。
+     */
+    embeddingDim: parseInt(process.env.EMBEDDING_DIM || '1024', 10),
+    /** 可选 API Key（OpenAI 等需要鉴权的服务） */
+    embeddingApiKey: process.env.EMBEDDING_API_KEY || null,
+    /** 语义搜索动态阈值下限保护(默认 0.3): 实际阈值 = max(mean+σ*k, 该值), 统计规律自适应 */
+    semanticMinRelevance: parseFloat(process.env.SEMANTIC_MIN_RELEVANCE || '0.3'),
+    /** 语义搜索动态阈值 σ 倍数 k(默认 2.5): 实际阈值 = mean + σ*k, 夹在 [下限, 0.9*max]。
+     *  分层采样实测: 2σ 对实体词过松(total 虚高、深层次污染), 3σ 对泛词(如 MMD, σ 大)过度收敛,
+     *  2.5σ 为全类型净改善折中(8/8 查询无关率下降, 无 MMD 误伤)。 */
+    semanticSigmaMultiplier: parseFloat(process.env.SEMANTIC_SIGMA_MULTIPLIER || '2.5'),
+    /**
+     * RRF 混合检索的常数 k(默认 60, 标准值): 融合分 = Σ 1/(k+rank)。
+     * 关键词(trgm) + 向量(语义) 双通道, 保证字面命中与语义相关互补。
+     */
+    rrfK: parseInt(process.env.RRF_K || '60', 10),
     uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR!),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '34359738368', 10), // 32GB
 

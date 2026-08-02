@@ -240,6 +240,10 @@ if (config.sslEnabled) {
     }
 
     const httpsServer = https.createServer(loadSSLCredentials(), app);
+    // 语义精排请求可能长达 20+ 分钟, 放宽 Node 默认请求超时(默认 5 分钟会断连)
+    httpsServer.requestTimeout = 2 * 60 * 60 * 1000; // 2 小时
+    httpsServer.headersTimeout = 60 * 1000; // 请求头仍按 60s
+    httpsServer.keepAliveTimeout = 65 * 1000;
     startServer(httpsServer, config.port, 'https');
     activeServers.push(httpsServer);
 
@@ -266,6 +270,10 @@ if (config.sslEnabled) {
     // ── HTTP 模式 ──
     console.log('[Server] 未配置 SSL 证书，以 HTTP 模式运行');
     const server = http.createServer(app);
+    // 语义精排请求可能长达 20+ 分钟, 放宽 Node 默认请求超时(默认 5 分钟会断连)
+    server.requestTimeout = 2 * 60 * 60 * 1000; // 2 小时
+    server.headersTimeout = 60 * 1000; // 请求头仍按 60s
+    server.keepAliveTimeout = 65 * 1000;
     startServer(server, config.port, 'http');
     activeServers.push(server);
     server.once('listening', onServerReady);

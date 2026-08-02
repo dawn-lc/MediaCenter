@@ -1,4 +1,4 @@
-import { pgTable, text, integer, doublePrecision, timestamp, uuid, uniqueIndex, index, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, doublePrecision, timestamp, uuid, uniqueIndex, index, bigint, vector } from 'drizzle-orm/pg-core';
 
 // ===== users 表 =====
 export const users = pgTable(
@@ -30,6 +30,8 @@ export const media = pgTable(
         minRole: text('min_role').notNull().default('guest'),
         duration: doublePrecision('duration'),
         thumbPath: text('thumb_path'),
+        // 标题向量(语义搜索, 由 Ollama qwen3-embedding 生成, 可空=未回填)
+        embedding: vector('embedding', { dimensions: 1024 }),
         mediaInfo: text('media_info'),
         sourceMeta: text('source_meta'),
         source: text('source'),
@@ -42,11 +44,11 @@ export const media = pgTable(
     (table) => [
         index('media_uploader_idx').on(table.uploaderId),
         index('media_mime_type_idx').on(table.mimeType),
-        index('media_title_idx').on(table.title),
         index('media_title_trgm_idx').using('gin', table.title.op('gin_trgm_ops')),
         index('media_desc_trgm_idx').using('gin', table.description.op('gin_trgm_ops')),
         index('media_created_at_idx').on(table.createdAt),
-        index('media_file_hash_idx').on(table.fileHash)
+        index('media_file_hash_idx').on(table.fileHash),
+        index('media_embedding_hnsw_idx').using('hnsw', table.embedding.op('vector_cosine_ops'))
     ]
 );
 
@@ -91,7 +93,7 @@ export const mediaTags = pgTable(
             .notNull()
             .references(() => tags.id, { onDelete: 'cascade' })
     },
-    (table) => [uniqueIndex('media_tags_pk_idx').on(table.mediaId, table.tagId), index('media_tags_media_idx').on(table.mediaId), index('media_tags_tag_idx').on(table.tagId)]
+    (table) => [uniqueIndex('media_tags_pk_idx').on(table.mediaId, table.tagId), index('media_tags_tag_idx').on(table.tagId)]
 );
 
 // ===== authors 表 =====

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { listUsers, updateUserRole } from '../controllers/mediaController';
 import { scanMediaFiles } from '../controllers/scanController';
-import { resetDatabase, deleteUser, toggleBan } from '../controllers/adminController';
+import { resetDatabase, deleteUser, toggleBan, listUsers, updateUserRole } from '../controllers/adminController';
 import { authenticate, requireAuth, requireAdmin } from '../middleware/auth';
 
 const router = Router();

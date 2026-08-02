@@ -86,6 +86,13 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
         // 启用 pg_trgm 扩展（trigram 索引依赖此扩展）
         await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
         console.log('[DB] pg_trgm 扩展已就绪');
+        // 启用 vector 扩展（语义搜索 HNSW 索引依赖；未安装时失败不影响启动，搜索自动回退 trgm）
+        try {
+            await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+            console.log('[DB] vector 扩展已就绪');
+        } catch (e) {
+            console.warn('[DB] vector 扩展启用失败(语义搜索将回退 pg_trgm):', e instanceof Error ? e.message : e);
+        }
     } catch (err) {
         console.warn('[DB] pg_trgm 扩展启用失败（可能无权限）:', err instanceof Error ? err.message : err);
     }
@@ -111,7 +118,18 @@ export async function syncSchemaInternal(dbInstance: ReturnType<typeof drizzle>)
             console.warn('[DB] ' + hint.hint);
         }
         if (result.sqlStatements?.length) {
-            await result.apply();
+            // 过滤破坏性语句(DROP VIEW/DROP TABLE 等): pushSchema 会把库中共享对象
+            // (如 pg_stat_statements 扩展视图)当成"schema 中不存在"而生成 DROP,
+            // apply 按序执行时会因 DROP 失败中断, 导致后续 ADD COLUMN 等变更未执行。
+            // 只执行非破坏性语句(ADD COLUMN / CREATE TABLE / CREATE INDEX 等), 保守安全。
+            const dropped = result.sqlStatements.filter((s) => /^\s*DROP\b/i.test(s));
+            const safe = result.sqlStatements.filter((s) => !/^\s*DROP\b/i.test(s));
+            if (dropped.length) {
+                console.warn('[DB] 跳过破坏性语句(不执行):', dropped);
+            }
+            for (const stmt of safe) {
+                await dbInstance.execute(sql.raw(stmt));
+            }
         }
     } catch (err: unknown) {
         console.warn('[DB] 同步失败:', err instanceof Error ? err.message : err);
