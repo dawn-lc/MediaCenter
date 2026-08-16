@@ -6,15 +6,12 @@ import type { Media } from '../types';
 import { getTagGroupMap } from '../utils';
 import PlayerMeta from './PlayerMeta';
 import Modal from '../components/Modal';
-import { TRUSTED_IMAGE_HOSTS } from '../config';
 
 function isTrustedImageUrl(src: string): boolean {
     try {
         const url = new URL(src, window.location.origin);
-        // 本站图片直接放行
-        if (url.origin === window.location.origin) return true;
-        // 检查可信任图床
-        return TRUSTED_IMAGE_HOSTS.includes(url.hostname);
+        // 仅本站（同源）图片直接加载；外部图片一律由用户点击确认后加载，不做第三方白名单
+        return url.origin === window.location.origin;
     } catch {
         return false;
     }

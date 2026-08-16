@@ -55,6 +55,7 @@ UPLOAD_DIR=./uploads
 | `API_TOKEN`                 | 静态 API 令牌（不设置则禁用）                           | 无                     |
 | `DB_POOL_SIZE`              | 数据库连接池上限                                        | `16`                   |
 | `MAX_FILE_SIZE`             | 单文件上传上限（字节）                                  | `34359738368`（32 GB） |
+| `SERVER_THUMBNAILS`         | 服务端缩略图生成（ffmpeg 提帧并缓存到本地）             | `false`                |
 | `ALLOW_REGISTRATION`        | 是否开放自助注册                                        | `false`                |
 | `MIN_PASSWORD_LENGTH`       | 注册密码最小长度                                        | `8`                    |
 | `EMBEDDING_BASE_URL`        | 语义搜索：OpenAI 兼容嵌入服务地址（配置后启用向量检索） | 无                     |

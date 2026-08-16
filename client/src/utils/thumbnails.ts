@@ -6,6 +6,7 @@
 
 import { findAtom, findAtomScan, parseFirstVideoFrame, getVideoStbl, buildSampleIndex, getSampleByteOffset, getByteRangeForSamples } from './mp4';
 import { createLogger } from './log';
+import { THUMBNAIL_WIDTH } from '../config';
 
 const THUMB_CACHE = 'thumbnails';
 const THUMB_PREFIX = '/thumb?id=';
@@ -427,7 +428,7 @@ function decodeFrame(blob: Blob, seekTime?: number): Promise<Blob | null> {
 
         const capture = () => {
             const canvas = document.createElement('canvas');
-            const maxW = 380;
+            const maxW = THUMBNAIL_WIDTH;
             const scale = Math.min(1, maxW / (video.videoWidth || 1));
             canvas.width = Math.round((video.videoWidth || 1) * scale);
             canvas.height = Math.round((video.videoHeight || 1) * scale);
@@ -505,7 +506,30 @@ export async function getCachedThumbnailUrl(mediaId: string): Promise<string | n
 }
 
 /**
+ * 尝试从服务端获取缩略图：
+ * - SERVER_THUMBNAILS 开启时后端用 ffmpeg 生成并落盘缓存（/api/stream/:id/thumb）
+ * - 未开启 / 非视频 / 出错时返回 null，调用方回退客户端生成
+ */
+async function tryServerThumbnailBlob(mediaId: string): Promise<Blob | null> {
+    try {
+        const token = localStorage.getItem('mediacenter_auth');
+        const res = await fetch(`/api/stream/${mediaId}/thumb`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            credentials: 'same-origin',
+        });
+        if (!res.ok) return null;
+        const type = res.headers.get('content-type') || '';
+        if (!type.startsWith('image/')) return null;
+        const blob = await res.blob();
+        return blob && blob.size > 0 ? blob : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * 一键：获取已缓存的缩略图，若不存在则生成并缓存
+ * 顺序：SW 缓存 → 服务端缩略图（开关开启时）→ 客户端解析生成
  * @returns SW 缓存路由 URL（/thumb?id=<mediaId>）或 null
  */
 export async function obtainThumbnailUrl(
@@ -519,13 +543,21 @@ export async function obtainThumbnailUrl(
     // 2. 受限并行：缓存未命中才占并发槽（下载/解码很重，全局限制避免打满带宽）
     const release = await acquireThumbSlot();
     try {
+        // 2.5 服务端缩略图优先（后端生成并本地缓存；未开启 404 快速回退）
+        const serverBlob = await tryServerThumbnailBlob(mediaId);
+        if (serverBlob) {
+            await cacheThumbnail(mediaId, serverBlob);
+            return navigator.serviceWorker?.controller ? cacheKey(mediaId) : URL.createObjectURL(serverBlob);
+        }
+
+        // 3. 回退：客户端解析生成
         const blob = await generateVideoThumbnail(videoUrl);
         if (!blob) return null;
 
-        // 3. 写入 SW 缓存
+        // 4. 写入 SW 缓存
         await cacheThumbnail(mediaId, blob);
 
-        // 4. 返回可用的 URL：SW 控制 → SW 路由 URL；否则 object URL（不依赖 SW）
+        // 5. 返回可用的 URL：SW 控制 → SW 路由 URL；否则 object URL（不依赖 SW）
         return navigator.serviceWorker?.controller ? cacheKey(mediaId) : URL.createObjectURL(blob);
     } finally {
         release();

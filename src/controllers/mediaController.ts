@@ -5,7 +5,8 @@ import { rename, stat } from 'fs/promises';
 import { eq, ilike, and, or, desc, count, sum, sql, inArray, notInArray, isNull, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { similarity } from '../db/index';
-import { deleteFile, isSupportedMimeType } from '../utils/storage';
+import { deleteFile, getMediaCategory, isSupportedMimeType } from '../utils/storage';
+import { ensureAudioThumbnail, ensureVideoThumbnail } from '../utils/thumbnail';
 import mime from 'mime-types';
 import { generateSignedUrl } from '../utils/signUrl';
 import { hasMinRole, ALL_ROLES, USER_ROLES } from '../utils/roles';
@@ -949,6 +950,21 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
         // 加载标签
         const tagMap = await loadTagsForMedia([id]);
         const tags = tagMap.get(id) || [];
+
+        // 服务端缩略图：更新完成后主动生成（未开启 SERVER_THUMBNAILS 时跳过，前端生成兜底）
+        if (config.serverThumbnails) {
+            const category = getMediaCategory(updatedResult[0].mimeType);
+            let thumbPath: string | null = null;
+            if (category === 'video') {
+                thumbPath = await ensureVideoThumbnail(updatedResult[0].filePath, id, updatedResult[0].duration);
+            } else if (category === 'audio') {
+                thumbPath = await ensureAudioThumbnail(updatedResult[0].filePath, id);
+            }
+            if (thumbPath && thumbPath !== updatedResult[0].thumbPath) {
+                await db.update(schema.media).set({ thumbPath }).where(eq(schema.media.id, id)).execute();
+                updatedResult[0].thumbPath = thumbPath;
+            }
+        }
 
         // 推送更新事件（按更新后的可见性过滤；不推回给触发者本人）
         serverEvents.emit('media.updated', {

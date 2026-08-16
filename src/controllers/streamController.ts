@@ -174,8 +174,9 @@ export async function downloadMedia(req: Request, res: Response): Promise<void> 
 }
 
 /**
- * 提供缩略图文件
+ * 提供缩略图文件（仅返回已生成的 thumbPath；未生成 → 404，由前端生成兜底）
  * GET /api/stream/:id/thumb
+ * 注：服务端缩略图在 updateMedia 时主动生成（SERVER_THUMBNAILS 开启时）
  */
 export async function serveThumbnail(req: Request, res: Response): Promise<void> {
     try {
@@ -215,7 +216,8 @@ export async function serveThumbnail(req: Request, res: Response): Promise<void>
 
         const mimeType = mime.lookup(filePath) || 'image/jpeg';
 
-        send(req, filePath, { etag: false, dotfiles: 'deny', maxAge: '1y' })
+        // 缩略图目录为 .thumbnails（隐藏目录），须允许 dotfiles；路径来自内部生成，可信
+        send(req, filePath, { etag: false, dotfiles: 'allow', maxAge: '1y' })
             .on('headers', (res) => {
                 res.setHeader('Content-Type', mimeType);
                 res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

@@ -79,7 +79,7 @@ app.use(
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'"],                       // 生产构建无内联脚本（含 SW 注册，均为外部文件）
                 styleSrc: ["'self'", "'unsafe-inline'"],     // React 内联样式（进度条/虚拟滚动/竖屏宽度等）
-                imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // 同源缩略图 + 前端生成 blob + 描述内 data 图 + 外部图床
+                imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // 同源缩略图 + 前端生成 blob + 描述内 data 图 + 外部图片（用户点击确认后加载，CSP 放行 https）
                 mediaSrc: ["'self'", 'blob:'],               // 视频/音频（video.js 可能用 blob/MSE）
                 connectSrc: ["'self'"],                      // API / SSE 同源；dev HMR 走 Vite 不受影响
                 fontSrc: ["'self'", 'data:'],

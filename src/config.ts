@@ -95,6 +95,14 @@ const config = {
     rrfK: parseInt(process.env.RRF_K || '60', 10),
     uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR!),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '34359738368', 10), // 32GB
+    /** 服务端缩略图生成开关（默认关闭；开启后 updateMedia 时用 ffmpeg 生成，前端生成兜底） */
+    serverThumbnails: process.env.SERVER_THUMBNAILS === 'true',
+    /** 缩略图存储子目录（相对 UPLOAD_DIR） */
+    thumbSubdir: '.thumbnails',
+    /** 缩略图宽度（与前端客户端生成的 380 一致） */
+    thumbWidth: 380,
+    /** ffmpeg 生成缩略图超时（毫秒） */
+    thumbTimeoutMs: 30_000,
 
     // 支持的媒体类型
     supportedMimeTypes: {

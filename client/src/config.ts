@@ -30,17 +30,9 @@ export const SIGN_URL_EXPIRES_PARAM = 'expires';
 /** localStorage key 前缀 */
 export const STORAGE_PREFIX = 'mediacenter_';
 
-// ── 可信任图床 ──
-/** 可信任的外部图片域名，匹配时自动加载 */
-export const TRUSTED_IMAGE_HOSTS: readonly string[] = [
-    'i.imgur.com',
-    'imgur.com',
-    'images.unsplash.com',
-    'iili.io',
-    'postimages.org',
-    'ibb.co',
-    'i.ibb.co'
-];
+// ── 缩略图 ──
+/** 缩略图宽度（与后端服务端生成一致） */
+export const THUMBNAIL_WIDTH = 380;
 
 // ── 播放列表虚拟滚动 ──
 /** 列表项高度（px） */
