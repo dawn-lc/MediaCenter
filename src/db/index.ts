@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { sql, eq, type SQL } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 import { randomBytes } from 'node:crypto';
 import * as schema from './schema';
 import config from '../config';

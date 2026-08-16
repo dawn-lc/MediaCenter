@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { eq, and, isNull } from 'drizzle-orm';
-import { validate } from 'uuid';
+import { isUuid } from '../utils/uuid';
 import mime from 'mime-types';
 import send from 'send';
 import { getDatabase, schema } from '../db/index';
@@ -17,7 +17,7 @@ import { access } from 'fs/promises';
 export async function streamMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -105,7 +105,7 @@ export async function streamMedia(req: Request, res: Response): Promise<void> {
 export async function downloadMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -180,7 +180,7 @@ export async function downloadMedia(req: Request, res: Response): Promise<void> 
 export async function serveThumbnail(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }

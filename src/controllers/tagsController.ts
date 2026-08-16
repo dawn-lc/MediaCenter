@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { eq, count, like, or, sql, desc, type SQL } from 'drizzle-orm';
+import { eq, count, like, or, sql, asc, desc, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
-import { validate } from 'uuid';
+import { isUuid } from '../utils/uuid';
 import { isString, isNotEmpty, isArray, isUndefined } from '../utils/env';
 import { invalidateSearchCache } from '../utils/searchCache';
 
@@ -23,9 +23,9 @@ export async function listTags(req: Request, res: Response): Promise<void> {
         if (sortBy === 'mediaCount') {
             orderBy = sortOrder === 'asc' ? sql`count(${schema.mediaTags.tagId}) asc` : sql`count(${schema.mediaTags.tagId}) desc`;
         } else if (sortBy === 'createdAt') {
-            orderBy = sortOrder === 'asc' ? schema.tags.createdAt : desc(schema.tags.createdAt);
+            orderBy = sortOrder === 'asc' ? asc(schema.tags.createdAt) : desc(schema.tags.createdAt);
         } else {
-            orderBy = sortOrder === 'asc' ? schema.tags.name : desc(schema.tags.name);
+            orderBy = sortOrder === 'asc' ? asc(schema.tags.name) : desc(schema.tags.name);
         }
 
         // 构建 WHERE 条件：搜索名称或别名
@@ -151,7 +151,7 @@ export async function deleteTag(req: Request, res: Response): Promise<void> {
 export async function updateTag(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(400).json({ error: 'tag.invalidParam' });
             return;
         }

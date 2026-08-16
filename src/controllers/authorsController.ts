@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { eq, and, count, isNull, like, or, sql, desc, inArray, type SQL } from 'drizzle-orm';
+import { eq, and, count, isNull, like, or, sql, asc, desc, inArray, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { isString, isArray, isUndefined } from '../utils/env';
 import { invalidateSearchCache } from '../utils/searchCache';
@@ -22,7 +22,7 @@ export async function listAuthors(req: Request, res: Response): Promise<void> {
         if (sortBy === 'mediaCount') {
             orderBy = sortOrder === 'asc' ? sql`count(${schema.media.id}) asc` : sql`count(${schema.media.id}) desc`;
         } else {
-            orderBy = sortOrder === 'asc' ? schema.authors.name : desc(schema.authors.name);
+            orderBy = sortOrder === 'asc' ? asc(schema.authors.name) : desc(schema.authors.name);
         }
 
         // 构建 WHERE 条件：搜索名称、别名或链接

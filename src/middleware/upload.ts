@@ -1,6 +1,6 @@
 import multer, { type Options } from 'multer';
 import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 import type { Request } from 'express';
 import mime from 'mime-types';
 import config from '../config';

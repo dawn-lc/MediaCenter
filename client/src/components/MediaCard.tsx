@@ -6,8 +6,23 @@ import type { Media } from '../types';
 import { formatDate, formatFileSize, getMediaIcon, getMediaTypeLabel } from '../utils';
 import { obtainThumbnailUrl } from '../utils/thumbnails';
 
+/**
+ * 媒体卡片所需字段子集：
+ * 兼容完整 Media（媒体库）与 stats.recent 的部分字段（首页），避免强依赖后端返回完整对象
+ */
+type CardMedia = Pick<Media, 'id' | 'title' | 'mimeType' | 'fileSize' | 'createdAt'> & {
+    streamUrl?: string;
+    thumbUrl?: string | null;
+    deletedAt?: string | null;
+    uploaderId?: string;
+    uploaderName?: string | null;
+    authorId?: string | null;
+    authorName?: string | null;
+    tags?: { id: string; name: string }[];
+};
+
 interface MediaCardProps {
-    media: Media;
+    media: CardMedia;
     /** 显示上传者链接（默认 true） */
     showUploader?: boolean;
     /** 显示作者链接（默认 true） */
@@ -65,7 +80,7 @@ export default function MediaCard({ media, showUploader = true, showAuthor = tru
                             title={t('meta.uploaderLabel')}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                navigate('/user/' + encodeURIComponent(media.uploaderId));
+                                navigate('/user/' + encodeURIComponent(media.uploaderId!));
                             }}
                         >
                             {media.uploaderName}

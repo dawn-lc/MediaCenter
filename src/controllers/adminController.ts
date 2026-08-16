@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { sql, eq, like, count, desc, type SQL } from 'drizzle-orm';
-import { validate, v4 as uuidv4 } from 'uuid';
+import { sql, eq, like, count, asc, desc, type SQL } from 'drizzle-orm';
+import { isUuid, uuidv4 } from '../utils/uuid';
 import { getDatabase, schema, ensureDefaultUsers, syncSchemaInternal, API_USERNAME, apiUserId } from '../db/index';
 import { isString } from '../utils/env';
 import { hashPassword } from '../utils/hash';
@@ -179,11 +179,11 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
         const sortOrder = isString(req.query.sortOrder) && req.query.sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
         let orderBy: SQL;
         if (sortBy === 'username') {
-            orderBy = sortOrder === 'asc' ? schema.users.username : desc(schema.users.username);
+            orderBy = sortOrder === 'asc' ? asc(schema.users.username) : desc(schema.users.username);
         } else if (sortBy === 'role') {
-            orderBy = sortOrder === 'asc' ? schema.users.role : desc(schema.users.role);
+            orderBy = sortOrder === 'asc' ? asc(schema.users.role) : desc(schema.users.role);
         } else {
-            orderBy = sortOrder === 'asc' ? schema.users.createdAt : desc(schema.users.createdAt);
+            orderBy = sortOrder === 'asc' ? asc(schema.users.createdAt) : desc(schema.users.createdAt);
         }
 
         const where = search ? like(schema.users.username, `%${search}%`) : undefined;
@@ -301,7 +301,7 @@ export async function createUser(req: Request, res: Response): Promise<void> {
 export async function updateUserRole(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'auth.userNotFound' });
             return;
         }

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 import { eq, and, gt } from 'drizzle-orm';
 import config from '../config';
 import { getDatabase, schema, currentTimestamp, intervalDays } from '../db/index';

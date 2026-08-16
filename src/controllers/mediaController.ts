@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { v4 as uuidv4, validate } from 'uuid';
+import { isUuid, uuidv4 } from '../utils/uuid';
 import { basename, extname, dirname, join } from 'path';
 import { rename, stat } from 'fs/promises';
 import { eq, ilike, and, or, desc, count, sum, sql, inArray, notInArray, isNull, type SQL } from 'drizzle-orm';
@@ -427,7 +427,7 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
 export async function getMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -546,7 +546,7 @@ export async function getMedia(req: Request, res: Response): Promise<void> {
 export async function refreshStreamToken(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -810,7 +810,7 @@ export async function createMedia(req: Request, res: Response): Promise<void> {
 export async function updateMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -996,7 +996,7 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
 export async function deleteMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }
@@ -1069,7 +1069,7 @@ export async function deleteMedia(req: Request, res: Response): Promise<void> {
 export async function restoreMedia(req: Request, res: Response): Promise<void> {
     try {
         const id = req.params.id;
-        if (!isString(id) || !validate(id)) {
+        if (!isString(id) || !isUuid(id)) {
             res.status(404).json({ error: 'media.notFound' });
             return;
         }

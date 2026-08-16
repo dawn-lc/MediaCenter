@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { eq } from 'drizzle-orm';
 import config from '../config';
 import { hasPermission } from '../utils/roles';
-import { validate } from 'uuid';
+import { isUuid } from '../utils/uuid';
 import { verifySignedUrl } from '../utils/signUrl';
 import { isString } from '../utils/env';
 import { apiUserId } from '../db';
@@ -115,7 +115,7 @@ export const requireUser = requirePermission(config.roles.user);
 export async function resolveStreamUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     // 路由参数尚未填充，用 URL 类安全解析路径
     const id = new URL(req.url, `${req.protocol}://${req.hostname}`).pathname.split('/').filter(Boolean)[0];
-    if (!id || !validate(id)) {
+    if (!id || !isUuid(id)) {
         res.status(404).json({ error: 'media.notFound' });
         return;
     }

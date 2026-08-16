@@ -1,6 +1,6 @@
 import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/uuid';
 import { inArray } from 'drizzle-orm';
 import mime from 'mime-types';
 import { getDatabase, schema } from '../db/index';
