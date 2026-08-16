@@ -59,7 +59,7 @@
         border-bottom: 1px solid var(--border);
         padding: 0 16px;
         max-height: 0;
-        overflow: hidden;
+        overflow-y: auto;
         transition:
             max-height 0.35s ease,
             padding 0.35s ease;
@@ -69,7 +69,8 @@
     }
 
     .navbar-menu.open {
-        max-height: 400px;
+        /* 高度跟随内容，最多占满导航栏以下的全部视口，超出时内部滚动 */
+        max-height: calc(100vh - 56px - env(safe-area-inset-top, 0px));
         padding: 16px;
         pointer-events: auto;
     }
@@ -150,7 +151,7 @@
         display: none;
     }
 
-    .nav-user-dropdown .dropdown-item {
+    .navbar-nav .nav-user-menu .nav-user-dropdown .dropdown-item {
         padding: 10px 14px;
         font-size: 15px;
     }
@@ -274,13 +275,16 @@
     /* 分页 */
     .pagination {
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 4px;
         margin-top: 24px;
     }
 
     .pagination button {
-        padding: 6px 10px;
-        font-size: 12px;
+        padding: 10px 16px;
+        font-size: 14px;
+        min-width: 44px;
+        min-height: 44px;
+        justify-content: center;
     }
 
     /* 卡片 */
@@ -346,6 +350,11 @@
         padding: 0;
     }
 
+    /* 移动端播放控制器悬浮在底栏，页面底部留白防止内容被遮挡 */
+    .player-page {
+        padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    }
+
     .player-wrapper {
         margin-bottom: 12px;
         border-radius: var(--radius-sm);
@@ -369,16 +378,40 @@
     }
 
     .player-controls {
-        flex-direction: column;
-        gap: 10px;
-        padding: 12px 16px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 90;
+        flex-direction: row;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
     }
 
     .player-controls-left,
     .player-controls-right {
-        width: 100%;
+        display: flex;
+        align-items: center;
         justify-content: center;
         flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* 左组占据剩余空间，让导航按钮尽可能长；右组自适应 */
+    .player-controls-left {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .player-controls-right {
+        flex: 0 0 auto;
     }
 
     .player-controls-position {
@@ -386,8 +419,13 @@
     }
 
     .player-controls .btn {
-        font-size: 12px;
-        padding: 6px 12px;
+        font-size: 14px;
+        padding: 10px 14px;
+        min-height: 44px;
+    }
+
+    .player-controls-left .btn {
+        flex: 1;
     }
 
     /* 操作卡片 */
@@ -478,17 +516,16 @@
         min-height: 44px;
     }
 
-    /* 播放器控制栏更紧凑 */
+    /* 播放器控制栏（悬浮底栏）按钮触控友好 */
     .player-controls-left .btn {
-        padding: 8px 14px;
-        font-size: 13px;
+        padding: 10px 14px;
+        font-size: 14px;
         flex: 1;
     }
 
     .player-controls-right .btn {
-        padding: 8px 14px;
-        font-size: 13px;
-        width: 100%;
+        padding: 10px 16px;
+        font-size: 14px;
     }
 
     /* 媒体卡片整体触摸友好 */
@@ -525,8 +562,9 @@
         font-size: 12px;
     }
 
+    /* 移动端表头列名与内容同字号（10px 过小，且 uppercase+letter-spacing 更显小） */
     table th {
-        font-size: 10px;
+        font-size: 12px;
     }
 
     /* 上传页 */
@@ -606,6 +644,36 @@
     }
 }
 
+/* ============================================
+   video.js 移动端控制栏适配
+   video.js 默认 responsive:false，控制栏不会进入
+   vjs-layout-* 紧凑模式；此处压缩画中画 / 播放倍速
+   按钮的固定宽度（默认 4em），让进度条占满剩余空间
+   ============================================ */
+@media (max-width: 768px) {
+
+    /* 压缩画中画按钮宽度 */
+    .player-wrapper .video-js .vjs-picture-in-picture-control {
+        width: 2.4em;
+    }
+
+    /* 移动端隐藏播放倍速按钮（触屏场景几乎不会切换倍速） */
+    .player-wrapper .video-js .vjs-playback-rate {
+        display: none;
+    }
+
+    /* 移动端隐藏音量控件（手机有实体音量键，屏上音量条无用） */
+    .player-wrapper .video-js .vjs-volume-panel {
+        display: none;
+    }
+
+    /* 进度条占满控制栏剩余全部宽度 */
+    .player-wrapper .video-js .vjs-progress-control {
+        flex: auto;
+        min-width: 2em;
+    }
+}
+
 /* 小屏手机 */
 @media (max-width: 480px) {
     .container {
@@ -669,16 +737,16 @@
     }
 
     .player-controls {
-        padding: 10px 12px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
     }
 
     .player-controls-left {
-        gap: 6px;
+        gap: 8px;
     }
 
     .player-controls-left .btn {
-        font-size: 12px;
-        padding: 6px 10px;
+        font-size: 14px;
+        padding: 10px 12px;
     }
 
     .actions-card {
@@ -714,12 +782,7 @@
 
     /* 防止页面滚动露底 */
     html {
-        background-color: #0f0f1a;
-    }
-
-    /* 全屏模式下去掉浏览器特有的样式 */
-    body {
-        -webkit-user-select: none;
+        background-color: var(--bg-dark);
         user-select: none;
     }
 

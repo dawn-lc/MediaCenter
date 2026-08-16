@@ -29,12 +29,26 @@ function isExternalLink(href: string): boolean {
     }
 }
 
+/** 仅允许安全协议：http/https/mailto 或站内协议（相对路径）；拒绝 javascript:/data:/vbscript:/file: 等危险协议（防 XSS） */
+function isSafeLinkHref(href: string): boolean {
+    try {
+        const url = new URL(href, window.location.origin);
+        const p = url.protocol;
+        return p === 'http:' || p === 'https:' || p === 'mailto:' || p === window.location.protocol;
+    } catch {
+        return false;
+    }
+}
+
 function MarkdownLink({ href, children }: { href?: string; children?: React.ReactNode }) {
     const { t } = useTranslation();
     const [showWarning, setShowWarning] = useState(false);
     const pendingHref = useRef('');
 
-    if (!href) return <a>{children}</a>;
+    // 危险协议（javascript:/data:/vbscript:/file: 等）或无法解析：渲染为纯文本，不产生可点击链接
+    if (!href || !isSafeLinkHref(href)) {
+        return <span className="markdown-plain-link">{children}</span>;
+    }
     if (!isExternalLink(href)) {
         return <a href={href}>{children}</a>;
     }
@@ -46,7 +60,11 @@ function MarkdownLink({ href, children }: { href?: string; children?: React.Reac
     };
 
     const handleConfirm = () => {
-        window.open(pendingHref.current, '_blank', 'noopener,noreferrer');
+        const target = pendingHref.current;
+        // 二次校验：仅打开安全协议（防 window.open 执行 javascript:/data:）
+        if (isSafeLinkHref(target)) {
+            window.open(target, '_blank', 'noopener,noreferrer');
+        }
         setShowWarning(false);
     };
 
@@ -71,7 +89,7 @@ function MarkdownLink({ href, children }: { href?: string; children?: React.Reac
                 }
             >
                 <p className="text-sm" style={{ lineHeight: 1.6 }}>
-                    {t('player.externalLinkWarning', { url: href })}
+                    {t('view.externalLinkWarning', { url: href })}
                 </p>
             </Modal>
         </>
@@ -93,8 +111,8 @@ function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
             ) : (
                 <>
                     <span className="untrusted-placeholder-icon">🖼️</span>
-                    <span className="untrusted-placeholder-text">{alt || t('player.untrustedImageNoAlt')}</span>
-                    <span className="untrusted-placeholder-hint">{t('player.untrustedImageHint')}</span>
+                    <span className="untrusted-placeholder-text">{alt || t('view.untrustedImageNoAlt')}</span>
+                    <span className="untrusted-placeholder-hint">{t('view.untrustedImageHint')}</span>
                 </>
             )}
         </span>
@@ -148,7 +166,7 @@ export default function PlayerInfo({ media, metaExtra }: PlayerInfoProps) {
                     </div>
                     {descOverflows && (
                         <button className="desc-expand-btn" onClick={() => setDescExpanded((v) => !v)}>
-                            {descExpanded ? t('player.collapse') : t('player.expand')}
+                            {descExpanded ? t('common.collapse') : t('common.expand')}
                         </button>
                     )}
                 </>

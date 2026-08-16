@@ -22,7 +22,8 @@ export async function scanMediaFiles(req: Request, res: Response): Promise<void>
         }
 
         const result = await scanDirectory(scanPath, {
-            uploaderId: req.user!.id!
+            uploaderId: req.user!.id!,
+            actorId: req.user?.id
         });
 
         res.json({

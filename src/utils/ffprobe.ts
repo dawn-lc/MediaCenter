@@ -41,6 +41,8 @@ export interface MediaInfo {
  */
 export async function probeMedia(filePath: string): Promise<MediaInfo | undefined> {
     try {
+        // 注意：不能加多个 -select_streams（后一个会覆盖前一个，只生效最后一个），
+        // 故全量返回 -show_streams，由下方代码分别取首个视频流与首个音频流
         const { stdout } = await execFileAsync(
             'ffprobe',
             [
@@ -48,8 +50,6 @@ export async function probeMedia(filePath: string): Promise<MediaInfo | undefine
                 '-print_format', 'json',
                 '-show_format',
                 '-show_streams',
-                '-select_streams', 'v:0',   // 只取第一个视频流
-                '-select_streams', 'a:0',   // 只取第一个音频流
                 filePath
             ],
             { timeout: 30_000, maxBuffer: 1024 * 1024 }  // 30s timeout, 1MB buffer

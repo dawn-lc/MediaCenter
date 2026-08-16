@@ -41,6 +41,13 @@
     gap: 20px;
 }
 
+/* 刷新中保留旧列表：淡显并禁点，避免高度塌缩导致滚动位置丢失 */
+.grid-loading {
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
 .grid-2 {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
@@ -61,12 +68,14 @@
     overflow: hidden;
     cursor: pointer;
     transition: var(--transition);
+    /* 防止 <a class="media-card"> 场景下标题继承浏览器默认链接色 */
+    color: var(--text-primary);
 }
 
 .media-card:hover {
     transform: translateY(-4px);
     border-color: rgba(108, 92, 231, 0.4);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow);
 }
 
 .media-card-thumb {
@@ -92,7 +101,7 @@
     position: absolute;
     top: 8px;
     left: 8px;
-    background: var(--color-danger, #e53935);
+    background: var(--danger);
     color: #fff;
     font-size: 11px;
     font-weight: 700;
@@ -186,14 +195,15 @@
     cursor: pointer;
     font-size: 11px;
     background: transparent;
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: var(--border);
     border-style: dashed;
-    color: #fff;
+    color: var(--text-secondary);
     transition: var(--transition);
 }
 
 .media-card-tag.tag-expand-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-input);
+    color: var(--text-primary);
 }
 
 /* ========== 操作卡片 ========== */

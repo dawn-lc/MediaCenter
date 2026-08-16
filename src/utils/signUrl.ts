@@ -78,7 +78,10 @@ export function verifySignedUrl(mediaId: string, query: { expires?: string; purp
 
     const expiresNum = parseInt(expires, 10);
     const expectedSig = createSignature(mediaId, isNaN(expiresNum) ? 0 : expiresNum, purpose, uid || '', role);
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+    // timingSafeEqual 要求等长 Buffer，长度不符直接判无效（避免抛异常导致 500）
+    const sigBuf = Buffer.from(sig);
+    const expectedBuf = Buffer.from(expectedSig);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
         return { valid: false, error: 'signUrl.invalid' };
     }
 

@@ -5,6 +5,8 @@ import { inArray } from 'drizzle-orm';
 import mime from 'mime-types';
 import { getDatabase, schema } from '../db/index';
 import config from '../config';
+import { invalidateSearchCache } from './searchCache';
+import { serverEvents } from './serverEvents';
 
 const SUPPORTED_EXTS = new Set(['.mp4', '.webm', '.ogv', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.mp3', '.wav', '.flac', '.aac', '.wma', '.m4a', '.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
@@ -20,6 +22,8 @@ export interface ScanResult {
 export interface ScanOptions {
     recursive?: boolean;
     uploaderId: string;
+    /** 扫描触发者 id（SSE 不推回给触发者本人） */
+    actorId?: string | null;
 }
 
 /**
@@ -102,6 +106,14 @@ export async function scanDirectory(dirPath: string, options: ScanOptions): Prom
     const workers = Array.from({ length: CONCURRENCY }, () => processNext());
     await Promise.all(workers);
     console.log(`[Scan] 完成: 导入 ${result.imported}, 跳过 ${result.skipped}, 错误 ${result.errors}`);
+    // 扫描导入会新增媒体，整体失效语义排序缓存
+    invalidateSearchCache();
+    // 扫描导入的媒体均为 admin 可见 → 仅推送给管理员（且非触发者本人）
+    serverEvents.emit('media.updated', {
+        type: 'scanned',
+        actorId: options.actorId ?? undefined,
+        visibility: { uploaderId, minRole: 'admin' }
+    });
     return result;
 }
 

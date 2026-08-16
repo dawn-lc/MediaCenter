@@ -6,6 +6,7 @@ import { hasPermission } from '../utils/roles';
 import { validate } from 'uuid';
 import { verifySignedUrl } from '../utils/signUrl';
 import { isString } from '../utils/env';
+import { apiUserId } from '../db';
 
 // 扩展 Express Request 类型
 declare global {
@@ -17,6 +18,33 @@ declare global {
                 role: string;
             };
         }
+    }
+}
+
+/**
+ * 从令牌字符串解析用户身份（JWT 或静态 API 令牌），非法令牌返回 null
+ * 供 authenticate（Authorization header）与 SSE 连接（token 走 query）复用
+ */
+export function resolveUserFromToken(token: string | null | undefined): Express.Request['user'] | null {
+    if (!token) return null;
+
+    // 静态 API 令牌（机器间调用）：映射到启动时创建的专属 'api' 服务账户（role=admin）
+    if (config.apiToken && token === config.apiToken) {
+        return { id: apiUserId, username: 'api', role: 'admin' };
+    }
+
+    try {
+        const payload = jwt.verify(token, config.jwtSecret);
+        if (typeof payload !== 'object' || !payload) return null;
+        const data = payload as Record<string, unknown>;
+        if (!isString(data.id) || !isString(data.username) || !isString(data.role)) return null;
+        return {
+            id: data.id,
+            username: data.username,
+            role: data.role
+        };
+    } catch {
+        return null;
     }
 }
 
@@ -37,40 +65,18 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
         return;
     }
 
-    // 静态 API 令牌（机器间调用，授予管理员权限）
-    if (config.apiToken && token === config.apiToken) {
-        req.user = { id: null, username: 'api', role: 'admin' };
-        next();
-        return;
-    }
-
-    try {
-        const payload = jwt.verify(token, config.jwtSecret);
-        if (typeof payload !== 'object' || !payload) {
-            res.status(401).json({ error: 'auth.tokenInvalid' });
-            return;
-        }
-        const data = payload as Record<string, unknown>;
-        if (!isString(data.id) || !isString(data.username) || !isString(data.role)) {
-            res.status(401).json({ error: 'auth.tokenInvalid' });
-            return;
-        }
-        req.user = {
-            id: data.id,
-            username: data.username,
-            role: data.role
-        };
-    } catch {
+    const user = resolveUserFromToken(token);
+    if (!user) {
         res.status(401).json({ error: 'auth.tokenInvalid' });
         return;
     }
-
+    req.user = user;
     next();
 }
 
 /**
  * 强制要求登录的中间件
- * 接受 JWT 登录用户（有 id）或 API 令牌（无 id 但 role=admin）
+ * 接受 JWT 登录用户（有 id）或 API 令牌（映射到 api 服务账户，role=admin）
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
     if (!req.user || (!req.user.id && req.user.role !== 'admin')) {

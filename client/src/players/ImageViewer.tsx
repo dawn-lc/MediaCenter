@@ -33,7 +33,7 @@ export default function ImageViewer({ media }: Props) {
                     if (nextIdx >= 0) {
                         const item = usePlaylistStore.getState().queue[nextIdx];
                         usePlaylistStore.setState({ currentIndex: nextIdx });
-                        if (item) navigate('/player/' + item.id);
+                        if (item) navigate('/view/' + item.id);
                     }
                     return 0;
                 }

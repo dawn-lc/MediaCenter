@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { Api, apiUrl } from '../api';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
 import { useAuthStore } from '../stores/auth';
 import EmptyState from '../components/EmptyState';
-import { TOAST_DURATION, STORAGE_PREFIX } from '../config';
+import { STORAGE_PREFIX } from '../config';
 
 export default function UploadPage() {
     const navigate = useNavigate();
@@ -16,7 +16,6 @@ export default function UploadPage() {
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [uploadError, setUploadError] = useState('');
 
     if (!auth.isLoggedIn) {
         return (
@@ -36,12 +35,11 @@ export default function UploadPage() {
     const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!file) {
-            toast.error(t('upload.fileRequired'));
+            notify.error(t('upload.fileRequired'));
             return;
         }
         setUploading(true);
         setProgress(0);
-        setUploadError('');
 
         // 用 XMLHttpRequest 实现进度跟踪
         const formData = new FormData();
@@ -69,26 +67,21 @@ export default function UploadPage() {
             try {
                 const data = JSON.parse(xhr.responseText);
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    toast.success(t('media.uploadSuccess'));
+                    notify.success(t('media.uploadSuccess'));
                     navigate('/edit/' + data.id);
                 } else {
                     const raw = data?.error || 'common.loadFailed';
                     const msg = raw.includes('.') && i18n.exists(raw) ? t(raw) : raw;
-                    setUploadError(msg);
-                    toast.error(msg, { duration: TOAST_DURATION });
+                    notify.error(msg);
                 }
             } catch {
-                const msg = t('common.loadFailed');
-                setUploadError(msg);
-                toast.error(msg, { duration: TOAST_DURATION });
+                notify.error(t('common.loadFailed'));
             }
         };
 
         xhr.onerror = () => {
             setUploading(false);
-            const msg = t('upload.networkError');
-            setUploadError(msg);
-            toast.error(msg, { duration: TOAST_DURATION });
+            notify.error(t('upload.networkError'));
         };
 
         xhr.send(formData);
@@ -140,12 +133,6 @@ export default function UploadPage() {
                             <p className="progress-info">
                                 {progress}%
                             </p>
-                        </div>
-                    )}
-
-                    {uploadError && (
-                        <div className="form-error mt-16">
-                            ⚠️ {uploadError}
                         </div>
                     )}
 

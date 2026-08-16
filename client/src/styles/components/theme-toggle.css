@@ -1,0 +1,135 @@
+/* ============================================
+   右下角悬浮主题切换开关
+   ============================================ */
+
+.theme-toggle {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 800;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+/* ── 悬浮按钮（FAB） ── */
+.theme-fab {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    box-shadow: 0 6px 20px rgba(108, 92, 231, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+    user-select: none;
+}
+
+.theme-fab:hover {
+    transform: translateY(-3px) scale(1.05);
+    filter: brightness(1.1);
+    box-shadow: 0 10px 28px rgba(108, 92, 231, 0.55), 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+
+.theme-fab:active {
+    transform: translateY(0) scale(0.96);
+}
+
+/* 浅色模式下渐变反转（青→紫），与深色模式镜像对称 */
+@media (prefers-color-scheme: light) {
+    .theme-fab {
+        background: linear-gradient(135deg, var(--secondary), var(--primary));
+    }
+}
+
+html[data-theme='light'] .theme-fab {
+    background: linear-gradient(135deg, var(--secondary), var(--primary));
+}
+
+.theme-fab-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+/* ── 展开菜单 ── */
+.theme-menu {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    right: 0;
+    min-width: 168px;
+    padding: 6px;
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    transform-origin: bottom right;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.theme-menu.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.theme-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.theme-menu-item:hover {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.theme-menu-item.active {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary-light);
+    font-weight: 600;
+}
+
+.theme-menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    flex: none;
+}
+
+.theme-menu-check {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--primary);
+    font-weight: 700;
+}
+
+/* 播放器全屏时隐藏，避免遮挡 */
+body:has(:fullscreen) .theme-toggle {
+    display: none;
+}

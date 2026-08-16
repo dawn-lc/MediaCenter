@@ -1,59 +1,79 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Api } from '../api';
 import type { User } from '../types';
 import { useAuthStore } from '../stores/auth';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
+import { useQuery } from '@tanstack/react-query';
 import AdminGuard from '../components/AdminGuard';
+import SortableTh from '../components/SortableTh';
+import Modal from '../components/Modal';
 import LoadingState from '../components/LoadingState';
 import Pagination from '../components/Pagination';
 import { showConfirm } from '../components/ConfirmDialog';
 
 export default function UsersPage() {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const currentUser = useAuthStore((s) => s.user);
     const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
-    const searchRef = useRef(searchQuery);
-    searchRef.current = searchQuery;
+    const [sortBy, setSortBy] = useState('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // 创建用户弹窗
+    const [showCreate, setShowCreate] = useState(false);
+    const [newUsername, setNewUsername] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [newRole, setNewRole] = useState('user');
 
-    const loadUsers = useCallback(async (pg: number, query: string) => {
-        setLoading(true);
-        try {
-            const data = await Api.listUsers({ page: pg, limit: 20, search: query || undefined });
-            setUsers(data.users || []);
-            if (data.pagination) {
-                setTotal(data.pagination.total);
-                setTotalPages(data.pagination.totalPages);
-            }
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const { data, isFetching, refetch } = useQuery({
+        queryKey: ['users', page, searchQuery, sortBy, sortOrder],
+        queryFn: () =>
+            Api.listUsers({
+                page,
+                limit: 20,
+                search: searchQuery || undefined,
+                sortBy,
+                sortOrder
+            })
+    });
 
+    // 取数结果同步到页面状态
     useEffect(() => {
-        loadUsers(page, searchRef.current);
-    }, [page, loadUsers]);
+        if (!data) return;
+        setUsers(data.users || []);
+        if (data.pagination) {
+            setTotal(data.pagination.total);
+            setTotalPages(data.pagination.totalPages);
+        }
+    }, [data]);
 
     const handleSearchChange = (val: string) => {
         setSearchQuery(val);
         setPage(1);
     };
 
-    const changeRole = async (userId: string, role: string) => {
-        try {
-            await Api.updateUserRole(userId, role);
-            toast.success(t('admin.users.roleUpdated'));
-            setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: role as User['role'] } : u)));
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
+    // 表头排序：同列切换方向，新列默认升序（时间列默认倒序）
+    const handleSort = (key: string) => {
+        if (sortBy === key) {
+            setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(key);
+            setSortOrder(key === 'createdAt' ? 'desc' : 'asc');
         }
+        setPage(1);
+    };
+
+    const changeRole = async (userId: string, role: string) => {
+        await notify.promise(Api.updateUserRole(userId, role), {
+            loading: t('common.saving'),
+            success: t('admin.users.roleUpdated'),
+            onSuccess: () => setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: role as User['role'] } : u)))
+        });
     };
 
     const handleDelete = (userId: string, username: string) => {
@@ -61,15 +81,15 @@ export default function UsersPage() {
             message: t('admin.users.deleteConfirm', { name: username }),
             danger: true,
             onConfirm: async () => {
-                try {
-                    await Api.deleteUser(userId);
-                    toast.success(t('admin.users.userDeleted'));
-                    const nextPage = users.length <= 1 && page > 1 ? page - 1 : page;
-                    setPage(nextPage);
-                    loadUsers(nextPage, searchRef.current);
-                } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-                }
+                await notify.promise(Api.deleteUser(userId), {
+                    loading: t('common.deleting'),
+                    success: t('admin.users.userDeleted'),
+                    onSuccess: () => {
+                        const nextPage = users.length <= 1 && page > 1 ? page - 1 : page;
+                        if (nextPage !== page) setPage(nextPage);
+                        else void refetch();
+                    }
+                });
             }
         });
     };
@@ -81,13 +101,31 @@ export default function UsersPage() {
             danger: !currentlyBanned,
             confirmText: currentlyBanned ? t('admin.users.unban') : t('admin.users.ban'),
             onConfirm: async () => {
-                try {
-                    const data = await Api.toggleBan(userId);
-                    toast.success(data.message);
-                    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, banned: data.banned ? 1 : 0 } : u)));
-                } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-                }
+                await notify.promise(Api.toggleBan(userId), {
+                    loading: t('common.saving'),
+                    success: (data) => data.message,
+                    onSuccess: (data) => setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, banned: data.banned ? 1 : 0 } : u)))
+                });
+            }
+        });
+    };
+
+    // 创建用户：校验由后端执行（密码策略等），成功刷新列表
+    const handleCreateUser = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const username = newUsername.trim();
+        const password = newPassword;
+        if (!username || !password) return;
+        const ok = await notify.promise(Api.createUser({ username, password, role: newRole }), {
+            loading: t('common.creating'),
+            success: t('admin.users.userCreated'),
+            onSuccess: () => {
+                setShowCreate(false);
+                setNewUsername('');
+                setNewPassword('');
+                setNewRole('user');
+                if (page !== 1) setPage(1);
+                else void refetch();
             }
         });
     };
@@ -100,7 +138,7 @@ export default function UsersPage() {
                 </div>
 
                 <div className="card section-card">
-                    {/* 搜索过滤 */}
+                    {/* 搜索过滤 + 创建用户 */}
                     <div className="admin-inline-form mb-16">
                         <input
                             className="form-input flex-1"
@@ -113,9 +151,12 @@ export default function UsersPage() {
                                 {t('common.clear')}
                             </button>
                         )}
+                        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                            {t('admin.users.createUser')}
+                        </button>
                     </div>
 
-                    {loading ? (
+                    {isFetching ? (
                         <LoadingState />
                     ) : users.length === 0 ? (
                         <p className="text-muted">{t('admin.users.noUsers')}</p>
@@ -125,8 +166,8 @@ export default function UsersPage() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>{t('admin.users.colUsername')}</th>
-                                            <th className="col-role">{t('admin.users.colRole')}</th>
+                                            <SortableTh label={t('admin.users.colUsername')} sortKey="username" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                                            <SortableTh label={t('common.colRole')} sortKey="role" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="col-role" />
                                             <th className="col-status">{t('admin.users.colStatus')}</th>
                                             <th className="col-actions">{t('admin.users.colActions')}</th>
                                         </tr>
@@ -135,9 +176,17 @@ export default function UsersPage() {
                                         {users.map((u) => (
                                             <tr key={u.id}>
                                                 <td>
-                                                    <span className="tag-badge">{u.username}</span>
+                                                    <span
+                                                        className="table-name-link"
+                                                        onClick={() => navigate('/user/' + encodeURIComponent(u.id))}
+                                                    >
+                                                        {u.username}
+                                                    </span>
                                                     {currentUser?.id === u.id && (
                                                         <span className="text-muted text-xs" style={{ marginLeft: 6 }}>{t('admin.users.currentUser')}</span>
+                                                    )}
+                                                    {u.isSystemUser && (
+                                                        <span className="badge badge-info text-xs" style={{ marginLeft: 6 }}>{t('common.systemUser')}</span>
                                                     )}
                                                 </td>
                                                 <td>
@@ -145,11 +194,11 @@ export default function UsersPage() {
                                                         className="form-input form-select col-role-select"
                                                         value={u.role}
                                                         onChange={(e) => changeRole(u.id, e.target.value)}
-                                                        disabled={currentUser?.id === u.id}
+                                                        disabled={currentUser?.id === u.id || u.isSystemUser}
                                                     >
-                                                        <option value="guest">{t('admin.users.roleGuest')}</option>
-                                                        <option value="user">{t('admin.users.roleUser')}</option>
-                                                        <option value="admin">{t('admin.users.roleAdmin')}</option>
+                                                        <option value="guest">{t('common.roleGuest')}</option>
+                                                        <option value="user">{t('common.roleUser')}</option>
+                                                        <option value="admin">{t('common.roleAdmin')}</option>
                                                     </select>
                                                 </td>
                                                 <td>
@@ -162,16 +211,16 @@ export default function UsersPage() {
                                                 <td>
                                                     <div className="action-buttons" style={{ justifyContent: 'flex-end' }}>
                                                         <button
-                                                            className={`btn btn-sm ${u.banned ? 'btn-primary' : 'badge-warning'}`}
+                                                            className={`btn btn-sm ${u.banned ? 'btn-primary' : 'btn-warning'}`}
                                                             onClick={() => handleToggleBan(u.id, u.username, u.banned)}
-                                                            disabled={currentUser?.id === u.id}
+                                                            disabled={currentUser?.id === u.id || u.isSystemUser}
                                                         >
                                                             {u.banned ? t('admin.users.unban') : t('admin.users.ban')}
                                                         </button>
                                                         <button
                                                             className="btn btn-sm btn-danger"
                                                             onClick={() => handleDelete(u.id, u.username)}
-                                                            disabled={currentUser?.id === u.id}
+                                                            disabled={currentUser?.id === u.id || u.isSystemUser}
                                                         >
                                                             {t('common.delete')}
                                                         </button>
@@ -186,6 +235,59 @@ export default function UsersPage() {
                         </>
                     )}
                 </div>
+
+                <Modal
+                    open={showCreate}
+                    title={t('admin.users.createUserTitle')}
+                    onClose={() => setShowCreate(false)}
+                    footer={
+                        <div className="auth-footer">
+                            <button className="btn btn-primary" type="submit" form="create-user-form">
+                                {t('admin.users.createBtn')}
+                            </button>
+                            <button className="btn btn-secondary" type="button" onClick={() => setShowCreate(false)}>
+                                {t('common.cancel')}
+                            </button>
+                        </div>
+                    }
+                >
+                    <form id="create-user-form" onSubmit={handleCreateUser}>
+                        <div className="form-group">
+                            <label>{t('admin.users.usernamePlaceholder')}</label>
+                            <input
+                                className="form-input"
+                                value={newUsername}
+                                onChange={(e) => setNewUsername(e.target.value)}
+                                placeholder={t('admin.users.usernamePlaceholder')}
+                                autoFocus
+                                required
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>{t('admin.users.passwordPlaceholder')}</label>
+                            <input
+                                className="form-input"
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder={t('admin.users.passwordPlaceholder')}
+                                required
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>{t('common.colRole')}</label>
+                            <select
+                                className="form-input form-select"
+                                value={newRole}
+                                onChange={(e) => setNewRole(e.target.value)}
+                            >
+                                <option value="guest">{t('common.roleGuest')}</option>
+                                <option value="user">{t('common.roleUser')}</option>
+                                <option value="admin">{t('common.roleAdmin')}</option>
+                            </select>
+                        </div>
+                    </form>
+                </Modal>
             </div>
         </AdminGuard>
     );

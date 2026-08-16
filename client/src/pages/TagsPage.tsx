@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Api } from '../api';
 import type { Tag } from '../types';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
+import { useQuery } from '@tanstack/react-query';
 import AdminGuard from '../components/AdminGuard';
+import SortableTh from '../components/SortableTh';
 import LoadingState from '../components/LoadingState';
 import Pagination from '../components/Pagination';
 import { showConfirm } from '../components/ConfirmDialog';
@@ -20,40 +22,41 @@ interface EditingRow {
 export default function TagsPage() {
     const { t } = useTranslation();
     const [tags, setTags] = useState<Tag[]>([]);
-    const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [newTagName, setNewTagName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('name');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [editing, setEditing] = useState<EditingRow | null>(null);
     const editRef = useRef<HTMLDivElement>(null);
-    const searchRef = useRef(searchQuery);
-    searchRef.current = searchQuery;
 
     useClickOutside(editRef, () => {
         if (editing && !editing.saving) setEditing(null);
     });
 
-    const loadTags = useCallback(async (pg: number, query: string) => {
-        setLoading(true);
-        try {
-            const data = await Api.listTags({ page: pg, limit: ADMIN_PAGE_SIZE, search: query || undefined });
-            setTags(data.tags || []);
-            if (data.pagination) {
-                setTotal(data.pagination.total);
-                setTotalPages(data.pagination.totalPages);
-            }
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const { data, isFetching, refetch } = useQuery({
+        queryKey: ['tags', page, searchQuery, sortBy, sortOrder],
+        queryFn: () =>
+            Api.listTags({
+                page,
+                limit: ADMIN_PAGE_SIZE,
+                search: searchQuery || undefined,
+                sortBy,
+                sortOrder
+            })
+    });
 
+    // 取数结果同步到页面状态
     useEffect(() => {
-        loadTags(page, searchRef.current);
-    }, [page, loadTags]);
+        if (!data) return;
+        setTags(data.tags || []);
+        if (data.pagination) {
+            setTotal(data.pagination.total);
+            setTotalPages(data.pagination.totalPages);
+        }
+    }, [data]);
 
     // 搜索时重置到第一页
     const handleSearchChange = (val: string) => {
@@ -61,19 +64,30 @@ export default function TagsPage() {
         setPage(1);
     };
 
+    // 表头排序：同列切换方向，新列默认升序（媒体数/时间列默认降序）
+    const handleSort = (key: string) => {
+        if (sortBy === key) {
+            setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(key);
+            setSortOrder(key === 'mediaCount' ? 'desc' : 'asc');
+        }
+        setPage(1);
+    };
+
     const handleCreate = async () => {
         const name = newTagName.trim();
         if (!name) return;
-        try {
-            await Api.createTag(name);
-            toast.success(t('admin.tags.createSuccess'));
-            setNewTagName('');
-            // 创建后回到第一页查看新标签
-            setPage(1);
-            loadTags(1, searchRef.current);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.createFailed'));
-        }
+        await notify.promise(Api.createTag(name), {
+            loading: t('common.creating'),
+            success: t('admin.tags.createSuccess'),
+            onSuccess: () => {
+                setNewTagName('');
+                // 创建后回到第一页查看新标签；已在第 1 页时手动刷新
+                if (page !== 1) setPage(1);
+                else void refetch();
+            }
+        });
     };
 
     const handleDelete = (tag: Tag) => {
@@ -81,16 +95,16 @@ export default function TagsPage() {
             message: t('admin.tags.confirmDelete', { name: tag.name }),
             danger: true,
             onConfirm: async () => {
-                try {
-                    await Api.deleteTag(tag.id);
-                    toast.success(t('admin.tagDeleted'));
-                    // 如果当前页只剩被删的这个，回到上一页
-                    const nextPage = tags.length <= 1 && page > 1 ? page - 1 : page;
-                    setPage(nextPage);
-                    loadTags(nextPage, searchRef.current);
-                } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-                }
+                await notify.promise(Api.deleteTag(tag.id), {
+                    loading: t('common.deleting'),
+                    success: t('admin.tagDeleted'),
+                    onSuccess: () => {
+                        // 如果当前页只剩被删的这个，回到上一页
+                        const nextPage = tags.length <= 1 && page > 1 ? page - 1 : page;
+                        if (nextPage !== page) setPage(nextPage);
+                        else void refetch();
+                    }
+                });
             }
         });
     };
@@ -106,19 +120,16 @@ export default function TagsPage() {
     const saveEditing = async () => {
         if (!editing || editing.saving) return;
         setEditing((prev) => prev ? { ...prev, saving: true } : null);
-        try {
-            const parsed = editing.altNames
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean);
-            await Api.updateTag(editing.id, { altNames: parsed });
-            toast.success(t('admin.tags.updateSuccess'));
-            setEditing(null);
-            loadTags(page, searchRef.current);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-            setEditing((prev) => prev ? { ...prev, saving: false } : null);
-        }
+        const parsed = editing.altNames
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const ok = await notify.promise(Api.updateTag(editing.id, { altNames: parsed }), {
+            loading: t('common.saving'),
+            success: t('admin.tags.updateSuccess')
+        });
+        setEditing(ok ? null : (prev) => prev ? { ...prev, saving: false } : null);
+        if (ok) void refetch();
     };
 
     const cancelEditing = () => {
@@ -162,7 +173,7 @@ export default function TagsPage() {
                         )}
                     </div>
 
-                    {loading ? (
+                    {isFetching ? (
                         <LoadingState />
                     ) : tags.length === 0 ? (
                         <p className="text-muted">{t('admin.tags.noTags')}</p>
@@ -173,9 +184,9 @@ export default function TagsPage() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th className="col-name">{t('admin.tags.colName')}</th>
+                                            <SortableTh label={t('admin.tags.colName')} sortKey="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="col-name" />
                                             <th>{t('admin.tags.colAltNames')}</th>
-                                            <th className="col-count">{t('admin.tags.colMediaCount')}</th>
+                                            <SortableTh label={t('admin.tags.colMediaCount')} sortKey="mediaCount" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="col-count" />
                                             <th className="col-actions">{t('admin.tags.colActions')}</th>
                                         </tr>
                                     </thead>
@@ -238,7 +249,7 @@ export default function TagsPage() {
                                                                         onClick={() => startEditing(tag)}
                                                                         title={t('admin.tags.editTitle')}
                                                                     >
-                                                                        {t('player.edit')}
+                                                                        {t('common.edit')}
                                                                     </button>
                                                                     <button
                                                                         className="btn btn-sm btn-danger"

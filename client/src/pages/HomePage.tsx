@@ -1,454 +1,144 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Api, resolveApiUrl } from '../api';
-import type { Media } from '../types';
-import { formatFileSize, formatDate, getMediaIcon, getMediaTypeLabel, getTagGroupMap } from '../utils';
-import { obtainThumbnailUrl } from '../utils/thumbnails';
+import { useQuery } from '@tanstack/react-query';
+import { Api } from '../api';
 import { useAuthStore } from '../stores/auth';
-import { usePlaylistStore } from '../stores/playlist';
-import { toast } from 'sonner';
+import { queryClient } from '../queryClient';
+import { formatFileSize } from '../utils';
 import TagList from '../components/TagList';
-import Pagination from '../components/Pagination';
+import MediaCard from '../components/MediaCard';
 import LoadingState from '../components/LoadingState';
-import EmptyState from '../components/EmptyState';
 
-import { useScrollRestore } from '../hooks/useScrollRestore';
-
-import { HOME_PAGE_SIZE, TOAST_DURATION, DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER, STORAGE_PREFIX } from '../config';
-
-/** 从 URLSearchParams 解析所有筛选/搜索/排序/分页参数 */
-function parseUrlParams(params: URLSearchParams) {
-    const raw = params.get('sort') || '';
-    const [sortField, sortDir] = raw ? raw.split(':') : [];
-    return {
-        tagExpr: params.get('tags') || '',
-        authorExpr: params.get('authorExpr') || '',
-        uploaderId: params.get('uploaderId') || '',
-        committedSearch: params.get('search') || '',
-        typeFilter: params.get('type') || '',
-        page: parseInt(params.get('page') || '1', 10) || 1,
-        sortBy: sortField || DEFAULT_SORT_FIELD,
-        sortOrder: sortDir || DEFAULT_SORT_ORDER,
-    };
-}
-
-const STORAGE_KEY = STORAGE_PREFIX + 'home_state';
-
-interface HomeState {
-    search: string;
-    committedSearch: string;
-    typeFilter: string;
-    tagExpr: string;
-    tagInput: string;
-    authorExpr: string;
-    authorInput: string;
-    uploaderId: string;
-    sortBy: string;
-    sortOrder: string;
-    page: number;
-}
-
-function loadState(): Partial<HomeState> {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch {
-        /* ignore */
-    }
-    return {};
-}
-
-function saveState(state: Partial<HomeState>): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-        /* ignore */
-    }
-}
-
+/**
+ * 首页概览（真正的 Home 页）
+ * - 媒体统计卡片（总数/类型/总大小/标签/作者/用户）
+ * - 最近上传（可见范围内，点击进入播放）
+ * - 快捷入口（媒体库 / 上传 / 管理）
+ * 数据来自 GET /api/media/stats（按当前用户可见范围过滤）
+ */
 export default function HomePage() {
-    const navigate = useNavigate();
-    const [searchParams, setSearchParams] = useSearchParams();
     const { t } = useTranslation();
-    const auth = useAuthStore();
-    const playlist = usePlaylistStore();
-    const { saveNow: saveScroll } = useScrollRestore();
+    const navigate = useNavigate();
+    const token = useAuthStore((s) => s.token);
+    const isAdmin = useAuthStore((s) => s.isAdmin);
 
-    const [items, setItems] = useState<Media[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [generatedThumbs, setGeneratedThumbs] = useState<Record<string, string>>({});
-    const generatedRef = useRef<Set<string>>(new Set());
-    const saved = loadState();
-    const urlParsed = parseUrlParams(searchParams);
-    // URL 参数优先于 localStorage（支持前进后退、外部链接）
-    const [page, setPage] = useState(urlParsed.page || saved.page || 1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [search, setSearch] = useState(saved.search || '');
-    const [committedSearch, setCommittedSearch] = useState(urlParsed.committedSearch || saved.committedSearch || '');
-    const [typeFilter, setTypeFilter] = useState(urlParsed.typeFilter || saved.typeFilter || '');
-    const [tagExpr, setTagExpr] = useState(urlParsed.tagExpr || saved.tagExpr || '');
-    const [tagInput, setTagInput] = useState(saved.tagInput || urlParsed.tagExpr || '');
-    const [authorExpr, setAuthorExpr] = useState(urlParsed.authorExpr || saved.authorExpr || '');
-    const [authorInput, setAuthorInput] = useState(saved.authorInput || urlParsed.authorExpr || '');
-    const [uploaderId, setUploaderId] = useState(urlParsed.uploaderId || saved.uploaderId || '');
-    const [sortBy, setSortBy] = useState(urlParsed.sortBy !== DEFAULT_SORT_FIELD ? urlParsed.sortBy : (saved.sortBy || DEFAULT_SORT_FIELD));
-    const [sortOrder, setSortOrder] = useState(urlParsed.sortOrder !== DEFAULT_SORT_ORDER ? urlParsed.sortOrder : (saved.sortOrder || DEFAULT_SORT_ORDER));
-    const [sortExplicit, setSortExplicit] = useState(false); // 用户是否主动点过排序
+    const { data, isFetching } = useQuery({
+        queryKey: ['stats', !!token],
+        queryFn: () => Api.getStats()
+    });
 
-    // 解析标签表达式分组，用于高亮不同筛选项
-    const tagGroupMap = getTagGroupMap(tagExpr);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await Api.listMedia({
-                page,
-                limit: HOME_PAGE_SIZE,
-                type: typeFilter || undefined,
-                search: committedSearch || undefined,
-                tags: tagExpr || undefined,
-                authorExpr: authorExpr || undefined,
-                uploaderId: uploaderId || undefined,
-                sortBy,
-                sortOrder
-            });
-            setItems(data.items || []);
-            setTotalPages(data.pagination?.totalPages || 1);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'), {
-                duration: TOAST_DURATION
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [page, typeFilter, committedSearch, tagExpr, authorExpr, sortBy, sortOrder]);
-
+    // SSE 媒体变更 → 刷新统计（防抖合并突发推送）
     useEffect(() => {
-        load();
-    }, [load]);
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const onMediaUpdated = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                timer = null;
+                void queryClient.invalidateQueries({ queryKey: ['stats'] });
+            }, 400);
+        };
+        window.addEventListener('mediacenter:media-updated', onMediaUpdated);
+        return () => {
+            window.removeEventListener('mediacenter:media-updated', onMediaUpdated);
+            if (timer) clearTimeout(timer);
+        };
+    }, []);
 
-    // 为无缩略图的视频生成客户端缩略图（串行执行，避免同时下载大量视频数据）
-    useEffect(() => {
-        const todo = items.filter(
-            (item) => !item.thumbUrl && item.mimeType.startsWith('video/') && !generatedRef.current.has(item.id)
-        );
-        for (const item of todo) generatedRef.current.add(item.id);
-
-        let cancelled = false;
-        (async () => {
-            for (const item of todo) {
-                if (cancelled) break;
-                const url = await obtainThumbnailUrl(item.id, resolveApiUrl(item.streamUrl));
-                if (cancelled) break;
-                if (url) {
-                    setGeneratedThumbs((prev) => ({ ...prev, [item.id]: url }));
-                }
-            }
-        })();
-
-        return () => { cancelled = true; };
-    }, [items]);
-
-    // 持久化搜索/筛选/排序状态到 localStorage
-    useEffect(() => {
-        saveState({
-            search,
-            committedSearch,
-            typeFilter,
-            tagExpr,
-            tagInput,
-            authorExpr,
-            authorInput,
-            uploaderId,
-            sortBy,
-            sortOrder,
-            page
-        });
-    }, [search, committedSearch, typeFilter, tagExpr, tagInput, authorExpr, authorInput, uploaderId, sortBy, sortOrder, page]);
-
-    // 同步状态 → URL（使用 React Router 的 setSearchParams，原子操作无竞态）
-    const internalChange = useRef(false);
-    useEffect(() => {
-        const next = new URLSearchParams(searchParams);
-        const setOrDel = (k: string, v: string) => v ? next.set(k, v) : next.delete(k);
-        setOrDel('tags', tagExpr);
-        setOrDel('authorExpr', authorExpr);
-        setOrDel('uploaderId', uploaderId);
-        setOrDel('search', committedSearch);
-        setOrDel('type', typeFilter);
-        setOrDel('sort', sortBy !== DEFAULT_SORT_FIELD || sortOrder !== DEFAULT_SORT_ORDER ? `${sortBy}:${sortOrder}` : '');
-        setOrDel('page', page > 1 ? String(page) : '');
-        if (next.toString() !== searchParams.toString()) {
-            internalChange.current = true;
-            setSearchParams(next, { replace: false });
-        }
-    }, [tagExpr, authorExpr, uploaderId, committedSearch, typeFilter, sortBy, sortOrder, page]);
-
-    // 反向同步：URL → state（用户手动修改地址栏、前进后退时响应）
-    useEffect(() => {
-        if (internalChange.current) { internalChange.current = false; return; }
-        const p = parseUrlParams(searchParams);
-        setTagExpr(p.tagExpr);
-        setTagInput(p.tagExpr);
-        setAuthorExpr(p.authorExpr);
-        setAuthorInput(p.authorExpr);
-        setUploaderId(p.uploaderId);
-        setCommittedSearch(p.committedSearch);
-        setTypeFilter(p.typeFilter);
-        setPage(p.page);
-        setSortBy(p.sortBy);
-        setSortOrder(p.sortOrder);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
-
-    const doSearch = () => {
-        setPage(1);
-        load();
-    };
-    const goPage = (p: number) => {
-        setPage(p);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const changeSort = (field: string) => {
-        setSortExplicit(true);
-        if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-        else {
-            setSortBy(field);
-            setSortOrder('desc');
-        }
-        setPage(1);
-    };
-
-    const sortLabel = (field: string) => (sortBy !== field ? '' : sortOrder === 'asc' ? t('home.sortAsc') : t('home.sortDesc'));
-
-    const playAll = async () => {
-        try {
-            const data = await Api.listMedia({
-                limit: 0,
-                type: typeFilter || undefined,
-                search: committedSearch || undefined,
-                tags: tagExpr || undefined,
-                authorExpr: authorExpr || undefined,
-                sortBy,
-                sortOrder
-            });
-            const allItems = data.items || [];
-            if (allItems.length === 0) return;
-            playlist.playAll(allItems, 0);
-            navigate('/player/' + allItems[0].id);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'), {
-                duration: 8000
-            });
-        }
-    };
+    const stats = data?.media;
+    const recent = data?.recent || [];
 
     return (
-        <div>
+        <div className="dashboard">
             <div className="page-header">
                 <div>
-                    <h1>{t('home.title')}</h1>
-                    <p>{t('home.browseHint')}</p>
+                    <h1>{t('dashboard.title')}</h1>
+                    <p>{t('dashboard.subtitle')}</p>
                 </div>
                 <div className="flex-gap-8">
-                    {items.length > 0 && (
-                        <button className="btn btn-primary" onClick={playAll}>
-                            {t('home.playAll')}
-                        </button>
+                    <Link to="/library" className="btn btn-primary">
+                        {t('dashboard.browse')}
+                    </Link>
+                    {token && (
+                        <Link to="/upload" className="btn btn-secondary">
+                            {t('dashboard.upload')}
+                        </Link>
                     )}
-                    {auth.isLoggedIn && (
-                        <button className="btn btn-secondary" onClick={() => navigate('/upload')}>
-                            {t('common.upload')}
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="card section-card">
-                <div className="search-bar">
-                    <div className="search-bar-group">
-                        <input
-                            className="form-input"
-                            placeholder={t('home.searchPlaceholder')}
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            onKeyUp={(e) => {
-                                if (e.key === 'Enter') {
-                                    setCommittedSearch(search);
-                                    setPage(1);
-                                }
-                            }}
-                        />
-                        <select
-                            className="form-input form-select"
-                            value={typeFilter}
-                            onChange={(e) => {
-                                setTypeFilter(e.target.value);
-                                setPage(1);
-                            }}
-                        >
-                            <option value="">{t('home.allTypes')}</option>
-                            <option value="video">{t('home.video')}</option>
-                            <option value="audio">{t('home.audio')}</option>
-                            <option value="image">{t('home.image')}</option>
-                        </select>
-                        <button
-                            className="btn btn-primary"
-                            onClick={() => {
-                                setCommittedSearch(search);
-                                setPage(1);
-                            }}
-                        >
-                            {t('common.search')}
-                        </button>
-                    </div>
-                    <div className="search-bar-group">
-                        <span className="sort-label">{t('home.sortLabel')}</span>
-                        <div className="sort-group">
-                            {[
-                                { key: 'createdAt' as const, label: t('home.sortByDate') },
-                                { key: 'title' as const, label: t('home.sortByTitle') },
-                                { key: 'fileSize' as const, label: t('home.sortBySize') },
-                                { key: 'mimeType' as const, label: t('home.sortByType') },
-                                { key: 'relevance' as const, label: t('home.sortByRelevance') }
-                            ].map((s) => (
-                                <button key={s.key} className={`btn btn-ghost ${sortBy === s.key ? 'active' : ''}`} onClick={() => changeSort(s.key)}>
-                                    {s.label}
-                                    {sortLabel(s.key)}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                {/* 标签表达式输入 */}
-                <div className="tag-expr-row">
-                    <input
-                        className="form-input flex-1 min-w-200"
-                        placeholder={t('home.tagExprPlaceholder')}
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyUp={(e) => {
-                            if (e.key === 'Enter') {
-                                setTagExpr(tagInput);
-                                setPage(1);
-                            }
-                        }}
-                    />
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                            setTagExpr(tagInput);
-                            setPage(1);
-                        }}
-                    >
-                        {t('common.filter')}
-                    </button>
-                    {(tagExpr || tagInput) && (
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => {
-                                setTagExpr('');
-                                setTagInput('');
-                                setPage(1);
-                            }}
-                        >
-                            {t('common.clear')}
-                        </button>
-                    )}
-                </div>
-                {/* 作者表达式筛选（语法同标签） */}
-                <div className="tag-expr-row">
-                    <input
-                        className="form-input flex-1 min-w-200"
-                        placeholder={t('home.authorExprPlaceholder')}
-                        value={authorInput}
-                        onChange={(e) => setAuthorInput(e.target.value)}
-                        onKeyUp={(e) => {
-                            if (e.key === 'Enter') {
-                                setAuthorExpr(authorInput);
-                                setPage(1);
-                            }
-                        }}
-                    />
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                            setAuthorExpr(authorInput);
-                            setPage(1);
-                        }}
-                    >
-                        {t('common.filter')}
-                    </button>
-                    {(authorExpr || authorInput) && (
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => { setAuthorExpr(''); setAuthorInput(''); setPage(1); }}
-                        >
-                            {t('common.clear')}
-                        </button>
+                    {isAdmin && (
+                        <Link to="/admin" className="btn btn-secondary">
+                            {t('dashboard.admin')}
+                        </Link>
                     )}
                 </div>
             </div>
 
-            {loading ? (
+            {!token && (
+                <div className="card section-card dashboard-login-hint">{t('dashboard.loginHint')}</div>
+            )}
+
+            {isFetching && !data ? (
                 <LoadingState />
-            ) : items.length === 0 ? (
-                <EmptyState
-                    title={t('home.noMedia')}
-                    description={t('home.noMediaHint')}
-                />
             ) : (
                 <>
-                    <div className="grid grid-2">
-                        {items.map((item) => (
-                            <div key={item.id} className="media-card" onClick={() => navigate('/player/' + item.id)}>
-                                <div className="media-card-thumb">
-                                    {item.thumbUrl || generatedThumbs[item.id] ? (
-                                        <img
-                                            src={item.thumbUrl ? resolveApiUrl(item.thumbUrl) : generatedThumbs[item.id]}
-                                            alt={item.title}
-                                            className="img-cover"
-                                            loading="lazy"
-                                        />
-                                    ) : item.mimeType.startsWith('image/') ? (
-                                        <img
-                                            src={generatedThumbs[item.id]}
-                                            alt={item.title}
-                                            className="img-cover"
-                                            loading="lazy"
-                                        />
-                                    ) : item.mimeType.startsWith('image/') ? (
-                                        <img
-                                            src={resolveApiUrl(item.streamUrl)}
-                                            alt={item.title}
-                                            className="img-cover"
-                                            loading="lazy"
-                                        />
-                                    ) : (
-                                        getMediaIcon(item.mimeType)
-                                    )}
-                                    {item.deletedAt && <span className="media-card-deleted-badge">{t('common.deleted')}</span>}
-                                </div>
-                                <div className="media-card-body">
-                                    <h3>{item.title}</h3>
-                                    <div className="media-meta">
-                                        <span>{getMediaTypeLabel(item.mimeType)}</span>
-                                        <span>{formatFileSize(item.fileSize)}</span>
-                                        <span>{formatDate(item.createdAt, t)}</span>
-                                    </div>
-                                    <TagList
-                                        tags={item.tags || []}
-                                        tagExpr={tagExpr}
-                                        onTagClick={(name) => navigate('/?tags=' + encodeURIComponent(name))}
-                                    />
-                                </div>
+                    {stats && (
+                        <div className="stat-grid">
+                            <div className="stat-card">
+                                <div className="stat-value">{stats.total}</div>
+                                <div className="stat-label">{t('common.totalMedia')}</div>
                             </div>
-                        ))}
-                    </div>
+                            <div className="stat-card">
+                                <div className="stat-value">{stats.video}</div>
+                                <div className="stat-label">{t('common.videos')}</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-value">{stats.audio}</div>
+                                <div className="stat-label">{t('common.audios')}</div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-value">{stats.image}</div>
+                                <div className="stat-label">{t('common.images')}</div>
+                            </div>
+                            {stats.totalSize != null && (
+                                <div className="stat-card">
+                                    <div className="stat-value stat-size">{formatFileSize(stats.totalSize)}</div>
+                                    <div className="stat-label">{t('dashboard.totalSize')}</div>
+                                </div>
+                            )}
+                            {data.tags != null && (
+                                <div className="stat-card">
+                                    <div className="stat-value">{data.tags}</div>
+                                    <div className="stat-label">{t('dashboard.tags')}</div>
+                                </div>
+                            )}
+                            {data.authors != null && (
+                                <div className="stat-card">
+                                    <div className="stat-value">{data.authors}</div>
+                                    <div className="stat-label">{t('dashboard.authors')}</div>
+                                </div>
+                            )}
+                            {data.users != null && (
+                                <div className="stat-card">
+                                    <div className="stat-value">{data.users}</div>
+                                    <div className="stat-label">{t('dashboard.users')}</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
-                    <Pagination page={page} totalPages={totalPages} onPageChange={goPage} />
+                    <h2 className="dashboard-recent-title">{t('dashboard.recent')}</h2>
+                    {recent.length === 0 ? (
+                        <div className="card section-card">
+                            <p className="muted">{t('dashboard.recentEmpty')}</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-2">
+                            {recent.map((item) => (
+                                <MediaCard key={item.id} media={item}>
+                                    <TagList tags={item.tags || []} />
+                                </MediaCard>
+                            ))}
+                        </div>
+                    )}
                 </>
             )}
         </div>

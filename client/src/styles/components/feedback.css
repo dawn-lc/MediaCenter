@@ -81,3 +81,15 @@
     background: var(--primary);
     color: #fff;
 }
+
+/* 浅色主题下 --success 变深绿，黑色文字对比不足 → 白字 */
+@media (prefers-color-scheme: light) {
+    .toast-success {
+        color: #fff;
+    }
+}
+
+/* 手动浅色（data-theme）同样生效 */
+html[data-theme='light'] .toast-success {
+    color: #fff;
+}

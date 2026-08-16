@@ -1,10 +1,11 @@
 import { useState, useEffect, type ReactNode } from 'react';
-import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { apiUrl } from '../api';
+import { useAuthStore } from '../stores/auth';
 
 // ---------------------------------------------------------------------------
 // PWAProvider
-// 功能：在线/离线状态检测 → 显示/隐藏离线提示条 + Toast 通知
+// 功能：SSE 长连接检测在线/离线 + 媒体变更推送 → 离线横幅（断网不弹 toast，横幅即提示）
 // ---------------------------------------------------------------------------
 
 interface PWAProviderProps {
@@ -13,23 +14,27 @@ interface PWAProviderProps {
 
 export default function PWAProvider({ children }: PWAProviderProps) {
     const { t } = useTranslation();
-    const [online, setOnline] = useState(navigator.onLine);
+    const token = useAuthStore((s) => s.token);
+    // 乐观初始：以 SSE 连接状态为准（连接建立/心跳 = 在线，断开 = 离线）
+    const [online, setOnline] = useState(true);
 
+    // SSE 存活 + 推送通道：EventSource 自动重连，onopen/onerror 即存活翻转
     useEffect(() => {
-        const goOnline = () => {
-            setOnline(true);
-            toast.success(t('pwa.online'), { duration: 3000 });
-        };
-        const goOffline = () => {
-            setOnline(false);
-            toast.error(t('pwa.offline'), { duration: 5000 });
-        };
+        const es = new EventSource(apiUrl('/events') + (token ? `?token=${encodeURIComponent(token)}` : ''));
+        es.onopen = () => setOnline(true);
+        es.onerror = () => setOnline(false);
+        // 媒体变更推送 → 转发为窗口事件，供页面订阅刷新（与 SESSION_EXPIRED_EVENT 同模式）
+        es.addEventListener('media.updated', (e) => {
+            let detail: unknown = undefined;
+            try { detail = JSON.parse((e as MessageEvent).data ?? 'null'); } catch { /* ignore */ }
+            window.dispatchEvent(new CustomEvent('mediacenter:media-updated', { detail }));
+        });
+        return () => es.close();
+    }, [token]);
 
-        window.addEventListener('online', goOnline);
-        window.addEventListener('offline', goOffline);
-
-        // PWA 方向锁：默认竖屏，视频全屏时释放，退出全屏时恢复
-        // 监听两种全屏事件：原生 fullscreenchange（桌面/Android）+ 自定义 vjs-fullscreen（iOS PWA）
+    // PWA 方向锁：默认竖屏，视频全屏时释放，退出全屏时恢复
+    // 监听两种全屏事件：原生 fullscreenchange（桌面/Android）+ 自定义 vjs-fullscreen（iOS PWA）
+    useEffect(() => {
         const lockPortrait = () => {
             if (screen.orientation?.lock) {
                 screen.orientation.lock('portrait').catch(() => { });
@@ -55,10 +60,8 @@ export default function PWAProvider({ children }: PWAProviderProps) {
             document.removeEventListener('vjs-fullscreen-enter', onFullscreenEnter);
             document.removeEventListener('vjs-fullscreen-exit', onFullscreenExit);
             unlockOrientation();
-            window.removeEventListener('online', goOnline);
-            window.removeEventListener('offline', goOffline);
         };
-    }, [t]);
+    }, []);
 
     return (
         <>
@@ -73,7 +76,7 @@ export default function PWAProvider({ children }: PWAProviderProps) {
                     left: 0,
                     right: 0,
                     zIndex: 9999,
-                    background: '#e74c3c',
+                    background: 'var(--danger)',
                     color: '#fff',
                     textAlign: 'center',
                     padding: '6px 12px',

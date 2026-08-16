@@ -62,7 +62,7 @@ export default function TagList({ tags, tagExpr = '', onTagClick, collapsed: def
                     className="media-card-tag tag-expand-toggle"
                     onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
                 >
-                    {open ? t('player.collapse') : t('player.expand')}
+                    {open ? t('common.collapse') : t('common.expand')}
                 </span>
             )}
         </div>

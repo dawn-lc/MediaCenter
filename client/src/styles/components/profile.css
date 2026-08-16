@@ -1,0 +1,144 @@
+/* ============================================
+   个人中心（Profile）
+   ============================================ */
+
+.profile-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.profile-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.profile-field-label {
+    width: 120px;
+    flex: none;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.profile-field-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.profile-password-form .btn {
+    margin-top: 4px;
+}
+
+/* 我的媒体统计（复用 dashboard .stat-grid / .stat-card） */
+
+/* 播放偏好设置 */
+.settings-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-child {
+    border-bottom: none;
+}
+
+.settings-row label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.settings-row input[type="range"] {
+    width: 180px;
+    accent-color: var(--primary);
+}
+
+.settings-row select {
+    width: auto;
+}
+
+/* 开关（toggle switch） */
+/* .settings-row label 的 flex:1 会拉伸开关 label（0,1,1 > .switch 的 flex:none 0,1,0），
+   导致隐形点击区占满整行 —— 需更高特异性覆盖为不拉伸 */
+.settings-row label.switch {
+    flex: none;
+    margin: 0;
+}
+
+.switch {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.switch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.switch-track {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.switch.checked .switch-track {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.switch.checked .switch-thumb {
+    transform: translateX(18px);
+    background: #fff;
+}
+
+.switch.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.switch.disabled input {
+    cursor: not-allowed;
+}
+
+.settings-value {
+    min-width: 44px;
+    text-align: right;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}

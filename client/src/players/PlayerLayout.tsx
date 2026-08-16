@@ -58,7 +58,7 @@ export default function PlayerLayout({
                                     className={`btn btn-sm ${autoPlayVideo ? 'btn-primary' : 'btn-secondary'}`}
                                     onClick={() => usePlayerSettings.getState().setAutoPlayVideo(!autoPlayVideo)}
                                 >
-                                    {autoPlayVideo ? t('player.autoPlay') : t('player.manualPlay')}
+                                    {autoPlayVideo ? t('view.autoPlay') : t('view.manualPlay')}
                                 </button>
                             </div>
                         )}

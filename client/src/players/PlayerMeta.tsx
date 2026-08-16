@@ -51,14 +51,14 @@ export default function PlayerMeta({ media, children }: PlayerMetaProps) {
             {/* 归属信息 - 登录用户可见上传者和作者 */}
             {isLoggedIn && media.uploaderName && (
                 <MetaItem label={t('meta.uploaderLabel')}>
-                    <span className="meta-link" onClick={() => navigate('/?uploaderId=' + encodeURIComponent(media.uploaderId))}>
+                    <span className="meta-link" onClick={() => navigate('/user/' + encodeURIComponent(media.uploaderId))}>
                         {media.uploaderName}
                     </span>
                 </MetaItem>
             )}
             {media.author && (
                 <MetaItem label={t('meta.authorLabel')}>
-                    <span className="meta-link" onClick={() => navigate('/?authorExpr=' + encodeURIComponent(media.author!.name))}>
+                    <span className="meta-link" onClick={() => navigate('/author/' + encodeURIComponent(media.author!.id))}>
                         {media.author.name}
                     </span>
                 </MetaItem>

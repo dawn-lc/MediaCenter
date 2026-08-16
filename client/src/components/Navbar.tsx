@@ -2,21 +2,21 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { changeLanguage, LANGUAGES } from '../i18n';
-import { toast } from 'sonner';
-import { Api } from '../api';
+import { Api, AUTH_REFRESH_STORAGE_KEY } from '../api';
+import { notify } from '../utils/notify';
 import Modal from './Modal';
 import { useClickOutside } from '../hooks/useClickOutside';
-import { TOAST_DURATION, STORAGE_PREFIX } from '../config';
+import { STORAGE_PREFIX } from '../config';
 
 export default function Navbar() {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const { user, isLoggedIn, isAdmin, logout } = useAuthStore();
     const location = useLocation();
     const [showLogin, setShowLogin] = useState(false);
     const [loginUser, setLoginUser] = useState('');
     const [loginPass, setLoginPass] = useState('');
     const [isRegister, setIsRegister] = useState(false);
+    const [rememberMe, setRememberMe] = useState(true);
     const [menuOpen, setMenuOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -47,10 +47,11 @@ export default function Navbar() {
 
     const handleAuth = async (e: React.SyntheticEvent<HTMLFormElement>) => {
         e.preventDefault();
-        try {
-            if (isRegister) {
-                const data = await Api.register(loginUser, loginPass);
+        const action: Promise<unknown> = isRegister
+            ? Api.register(loginUser, loginPass).then((data) => {
                 localStorage.setItem(STORAGE_PREFIX + 'auth', data.token);
+                if (rememberMe) localStorage.setItem(AUTH_REFRESH_STORAGE_KEY, data.refreshToken);
+                else localStorage.removeItem(AUTH_REFRESH_STORAGE_KEY);
                 useAuthStore.setState({
                     user: data.user,
                     token: data.token,
@@ -58,21 +59,18 @@ export default function Navbar() {
                     isAdmin: data.user.role === 'admin',
                     ready: true
                 });
-            } else {
-                await useAuthStore.getState().login(loginUser, loginPass);
+            })
+            : useAuthStore.getState().login(loginUser, loginPass, rememberMe);
+        await notify.promise(action, {
+            loading: isRegister ? t('auth.registering') : t('auth.loggingIn'),
+            success: isRegister ? t('auth.registerSuccess') : t('auth.loginSuccess'),
+            toastOptions: { position: 'top-center' },
+            onSuccess: () => {
+                setShowLogin(false);
+                setLoginUser('');
+                setLoginPass('');
             }
-            setShowLogin(false);
-            setLoginUser('');
-            setLoginPass('');
-            toast.success(isRegister ? t('auth.registerSuccess') : t('auth.loginSuccess'), {
-                position: 'top-center'
-            });
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('auth.loginFailed'), {
-                duration: TOAST_DURATION,
-                position: 'top-center'
-            });
-        }
+        });
     };
 
     return (
@@ -91,6 +89,9 @@ export default function Navbar() {
                 <div className={`navbar-menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
                     <div className="navbar-nav">
                         <Link to="/" className={`nav-link ${isActive('/')}`}>
+                            {t('nav.home')}
+                        </Link>
+                        <Link to="/library" className={`nav-link ${isActive('/library')}`}>
                             {t('nav.mediaLib')}
                         </Link>
                         {isAdmin && (
@@ -126,6 +127,9 @@ export default function Navbar() {
                                             {user?.username}
                                             {isAdmin && <span className="dropdown-role-badge">{t('admin.users.adminLabel')}</span>}
                                         </div>
+                                        <Link to="/profile" className="dropdown-item" onClick={() => setUserMenuOpen(false)}>
+                                            {t('profile.title')}
+                                        </Link>
                                         <button className="dropdown-item danger" onClick={() => { setUserMenuOpen(false); logout(); }}>
                                             {t('common.logout')}
                                         </button>
@@ -137,24 +141,13 @@ export default function Navbar() {
                                 {t('common.login')}
                             </button>
                         )}
-                        <select
-                            className="form-input form-select nav-lang-select"
-                            value={i18n.language}
-                            onChange={(e) => changeLanguage(e.target.value)}
-                        >
-                            {LANGUAGES.map((lang) => (
-                                <option key={lang.code} value={lang.code}>
-                                    {lang.label}
-                                </option>
-                            ))}
-                        </select>
                     </div>
                 </div>
             </nav>
 
             <Modal
                 open={showLogin}
-                title=""
+                title={isRegister ? t('auth.registerTitle') : t('auth.loginTitle')}
                 onClose={() => setShowLogin(false)}
                 footer={
                     <div className="auth-footer">
@@ -167,9 +160,6 @@ export default function Navbar() {
                     </div>
                 }
             >
-                <div className="modal-auth-icon">
-                    <div className="auth-avatar"></div>
-                </div>
                 <form id="auth-form" onSubmit={handleAuth}>
                     <div className="form-group">
                         <label>{t('common.username')}</label>
@@ -192,6 +182,19 @@ export default function Navbar() {
                             onChange={(e) => setLoginPass(e.target.value)}
                             required
                         />
+                    </div>
+                    <div className="form-group form-group-checkbox">
+                        <label className="auth-remember">
+                            <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <span className="auth-remember-text">
+                                <span className="auth-remember-title">{t('auth.rememberMe')}</span>
+                                <span className="auth-remember-hint">{t('auth.rememberMeHint')}</span>
+                            </span>
+                        </label>
                     </div>
                 </form>
                 <div className="modal-auth-toggle">

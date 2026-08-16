@@ -9,16 +9,18 @@ export interface PlayerSettings {
     staticImageDuration: number;
     playbackRate: number;
     volume: number;
+    muted: boolean;
     setStaticImageDuration(seconds: number): void;
     setAutoPlay(on: boolean): void;
     setAutoPlayVideo(on: boolean): void;
     setPlaybackRate(rate: number): void;
     setVolume(vol: number): void;
+    setMuted(muted: boolean): void;
 }
 
 // 节流保存
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleSave(data: Omit<PlayerSettings, 'setStaticImageDuration' | 'setAutoPlay' | 'setAutoPlayVideo' | 'setPlaybackRate' | 'setVolume'>) {
+function scheduleSave(data: Omit<PlayerSettings, 'setStaticImageDuration' | 'setAutoPlay' | 'setAutoPlayVideo' | 'setPlaybackRate' | 'setVolume' | 'setMuted'>) {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
         saveTimer = null;
@@ -47,6 +49,7 @@ export const usePlayerSettings = create<PlayerSettings>((set, get) => ({
     staticImageDuration: saved?.staticImageDuration ?? DEFAULT_STATIC_IMAGE_DURATION,
     playbackRate: saved?.playbackRate ?? DEFAULT_PLAYBACK_RATE,
     volume: saved?.volume ?? DEFAULT_VOLUME,
+    muted: saved?.muted ?? false,
 
     setStaticImageDuration: (seconds) => {
         set({ staticImageDuration: seconds });
@@ -70,6 +73,11 @@ export const usePlayerSettings = create<PlayerSettings>((set, get) => ({
 
     setVolume: (vol) => {
         set({ volume: vol });
+        scheduleSave(get());
+    },
+
+    setMuted: (muted) => {
+        set({ muted });
         scheduleSave(get());
     }
 }));

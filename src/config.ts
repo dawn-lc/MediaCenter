@@ -118,6 +118,13 @@ const config = {
         }
     } as const,
 
+    // ── 注册与账号安全 ──
+
+    /** 是否开放自助注册（默认关闭；需显式设置 ALLOW_REGISTRATION=true） */
+    allowRegistration: process.env.ALLOW_REGISTRATION === 'true',
+    /** 注册密码最小长度（默认 8） */
+    minPasswordLength: parseInt(process.env.MIN_PASSWORD_LENGTH || '8', 10),
+
     // ── 业务常量 ──
 
     /** 标题最大长度（常见文件系统最大文件名 255 字节） */

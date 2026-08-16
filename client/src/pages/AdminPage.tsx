@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Api } from '../api';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
 import { useAuthStore } from '../stores/auth';
 import AdminGuard from '../components/AdminGuard';
 import { showConfirm } from '../components/ConfirmDialog';
@@ -19,14 +19,11 @@ export default function AdminPage() {
 
     const runScan = async () => {
         setScanning(true);
-        try {
-            const data = await Api.scanDirectory(scanPath);
-            toast.success(t('admin.scanComplete') + ` (${data.scan.imported}/${data.scan.total})`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('admin.scanError'));
-        } finally {
-            setScanning(false);
-        }
+        await notify.promise(Api.scanDirectory(scanPath), {
+            loading: t('admin.scan.scanning'),
+            success: (data) => t('admin.scanComplete') + ` (${data.scan.imported}/${data.scan.total})`
+        });
+        setScanning(false);
     };
 
     const handleReset = () => {
@@ -43,16 +40,15 @@ export default function AdminPage() {
                     cancelText: t('common.cancel'),
                     onConfirm: async () => {
                         setResetting(true);
-                        try {
-                            await Api.resetDatabase();
-                            useAuthStore.getState().logout();
-                            toast.success(t('admin.danger.success'));
-                            navigate('/');
-                        } catch (err: unknown) {
-                            toast.error(err instanceof Error ? err.message : t('admin.resetError'));
-                        } finally {
-                            setResetting(false);
-                        }
+                        await notify.promise(Api.resetDatabase(), {
+                            loading: t('admin.danger.resetting'),
+                            success: t('admin.danger.success'),
+                            onSuccess: () => {
+                                useAuthStore.getState().logout();
+                                navigate('/');
+                            }
+                        });
+                        setResetting(false);
                     }
                 });
             }
@@ -71,7 +67,8 @@ export default function AdminPage() {
             } else {
                 setFileHashResult({ found: false });
             }
-        } catch {
+        } catch (err) {
+            notify.error(err);
             setFileHashResult({ found: false });
         } finally {
             setFileHashSearching(false);
@@ -161,7 +158,7 @@ export default function AdminPage() {
                             {fileHashResult.found ? (
                                 <span>
                                     {t('admin.fileHash.found')}{' '}
-                                    <Link to={`/player/${fileHashResult.media!.id}`} className="link-card-inline">
+                                    <Link to={`/view/${fileHashResult.media!.id}`} className="link-card-inline">
                                         {fileHashResult.media!.title}
                                     </Link>
                                 </span>

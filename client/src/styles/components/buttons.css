@@ -69,6 +69,28 @@
     box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4);
 }
 
+/* 警告操作（如封禁）：实心亮琥珀，暗色模式下保持醒目 */
+.btn-warning {
+    background: linear-gradient(135deg, var(--warning), var(--warning-strong));
+    color: #1a1a2e;
+}
+
+.btn-warning:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(255, 212, 59, 0.4);
+}
+
+/* 浅色下 --warning 变深橙，深色文字对比不足 → 白字 */
+@media (prefers-color-scheme: light) {
+    .btn-warning {
+        color: #fff;
+    }
+}
+
+html[data-theme='light'] .btn-warning {
+    color: #fff;
+}
+
 .btn-sm {
     padding: 6px 16px;
     font-size: 13px;

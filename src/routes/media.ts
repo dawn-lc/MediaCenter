@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listMedia, getMedia, refreshStreamToken, uploadMedia, createMedia, updateMedia, deleteMedia, restoreMedia } from '../controllers/mediaController';
+import { listMedia, getStats, getMedia, refreshStreamToken, uploadMedia, createMedia, updateMedia, deleteMedia, restoreMedia } from '../controllers/mediaController';
 import { authenticate, requireAuth } from '../middleware/auth';
 import upload from '../middleware/upload';
 
@@ -7,6 +7,9 @@ const router = Router();
 
 // 获取媒体列表（根据权限过滤）
 router.get('/', authenticate, listMedia);
+
+// 概览统计（须在 /:id 之前注册，避免被 :id 捕获）
+router.get('/stats', authenticate, getStats);
 
 // 获取单个媒体详情（根据权限过滤）
 router.get('/:id', authenticate, getMedia);

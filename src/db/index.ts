@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { sql, eq, type SQL } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'node:crypto';
 import * as schema from './schema';
 import config from '../config';
 import { hashPassword } from '../utils/hash';
@@ -100,7 +101,91 @@ export async function initDatabase(): Promise<ReturnType<typeof drizzle>> {
     // 根据 schema.ts 自动同步表结构
     await syncSchemaInternal(db);
 
+    // 外键删除策略对齐（pushSchema 不比较 ON DELETE 动作，需运行时校验并重建）
+    await ensureForeignKeyPolicies();
+
+    // refresh token 过期自动清理（数据库触发器 + 启动清理）
+    await ensureRefreshTokenCleanup();
+
     return db;
+}
+
+/**
+ * 外键删除策略对齐：确保 media.uploader_id → users.id 为 ON DELETE RESTRICT
+ * drizzle-kit pushSchema 不比较 FK 的 ON DELETE 动作，若历史库中为 CASCADE 需在此重建。
+ * PostgreSQL DDL 支持事务：重建失败会回滚，旧约束保持原状，下次启动重试。
+ */
+async function ensureForeignKeyPolicies(): Promise<void> {
+    try {
+        // media.uploader_id → users.id：要求 ON DELETE RESTRICT（删除用户前必须先转移其媒体）
+        const res = await pool!.query(`
+            SELECT conname, confdeltype
+            FROM pg_constraint
+            WHERE conrelid = 'media'::regclass AND contype = 'f' AND confrelid = 'users'::regclass
+        `);
+        const fk = res.rows[0] as { conname: string; confdeltype: string } | undefined;
+        if (!fk) return; // 约束尚不存在（新库），由 pushSchema 按 schema.ts 直接创建为 RESTRICT
+        if (fk.confdeltype !== 'r') {
+            const client = await pool!.connect();
+            try {
+                await client.query('BEGIN');
+                await client.query(`ALTER TABLE media DROP CONSTRAINT "${fk.conname}"`);
+                await client.query(`
+                    ALTER TABLE media ADD CONSTRAINT "${fk.conname}" FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE RESTRICT
+                `);
+                await client.query('COMMIT');
+            } catch (rebuildErr) {
+                await client.query('ROLLBACK');
+                throw rebuildErr; // 回滚后旧约束保持原状，交由外层 catch 记录
+            } finally {
+                client.release();
+            }
+
+            // 重建后复核：确认约束策略已实际生效（防止异常静默通过）
+            const verify = await pool!.query(`
+                SELECT confdeltype FROM pg_constraint
+                WHERE conrelid = 'media'::regclass AND contype = 'f' AND confrelid = 'users'::regclass
+            `);
+            const now = verify.rows[0] as { confdeltype: string } | undefined;
+            if (!now || now.confdeltype !== 'r') {
+                console.warn(`[DB] 外键重建后复核异常：当前策略=${now?.confdeltype ?? '无约束'}`);
+            } else {
+                console.warn('[DB] media.uploader_id 外键已自动重建为 ON DELETE RESTRICT（已复核）');
+            }
+        }
+    } catch (err) {
+        console.warn('[DB] 外键策略对齐失败（约束未变更，下次启动将重试）:', err instanceof Error ? err.message : err);
+    }
+}
+
+/**
+ * refresh token 过期自动清理：
+ * - 数据库内置：BEFORE INSERT 触发器，每次插入新 token 时顺带删除已过期记录（自维护，无需应用定时任务）
+ * - 启动时再清理一次，覆盖长期无活动、触发器未触发的场景
+ */
+async function ensureRefreshTokenCleanup(): Promise<void> {
+    try {
+        await db!.execute(sql`
+            CREATE OR REPLACE FUNCTION cleanup_expired_refresh_tokens() RETURNS trigger AS $$
+            BEGIN
+                DELETE FROM refresh_tokens WHERE expires_at < now();
+                RETURN NEW;
+            EXCEPTION WHEN OTHERS THEN
+                RETURN NEW; -- 清理失败不影响正常插入
+            END;
+            $$ LANGUAGE plpgsql;
+        `);
+        await db!.execute(sql`
+            DROP TRIGGER IF EXISTS trg_refresh_tokens_cleanup ON refresh_tokens;
+            CREATE TRIGGER trg_refresh_tokens_cleanup BEFORE INSERT ON refresh_tokens
+                FOR EACH ROW EXECUTE FUNCTION cleanup_expired_refresh_tokens();
+        `);
+        // 启动时清理一次
+        await db!.execute(sql`DELETE FROM refresh_tokens WHERE expires_at < now()`);
+        console.log('[DB] refresh token 过期清理触发器已就绪');
+    } catch (err) {
+        console.warn('[DB] refresh token 清理触发器创建失败（不影响正常使用）:', err instanceof Error ? err.message : err);
+    }
 }
 
 /**
@@ -175,9 +260,49 @@ export async function ensureDefaultUsers(): Promise<void> {
     console.log(`[DB] 管理员账号已创建: ${admin.username}`);
 }
 
+/** API 服务账户的保留用户名（静态 API 令牌对应的系统账号，不可密码登录） */
+export const API_USERNAME = 'api';
+/** API 服务账户的用户 id（启动时创建/解析后填充，供 auth 中间件映射） */
+export let apiUserId: string | null = null;
+
+/**
+ * 确保 API 服务账户存在（仅当配置了 API_TOKEN 时调用），返回其 id。
+ * - 该账户对应静态 API 令牌，授予管理员权限
+ * - 密码为随机不可知哈希 → 无法通过用户名密码登录
+ * - 用户名保留，防止被注册占用
+ */
+export async function ensureApiUser(): Promise<string> {
+    const db = getDatabase();
+    const [existing] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.username, API_USERNAME)).limit(1).execute();
+    if (existing) {
+        // 服务账户始终为管理员（防止被降权）
+        await db.update(schema.users).set({ role: 'admin' }).where(eq(schema.users.id, existing.id)).execute();
+        apiUserId = existing.id;
+        return existing.id;
+    }
+    const id = uuidv4();
+    await db
+        .insert(schema.users)
+        .values({
+            id,
+            username: API_USERNAME,
+            passwordHash: hashPassword(randomBytes(32).toString('hex')),
+            role: 'admin'
+        })
+        .execute();
+    apiUserId = id;
+    console.log(`[DB] API 服务账户已创建: ${API_USERNAME}`);
+    return id;
+}
+
 /** pg_trgm 相似度函数：similarity(column, 'keyword') */
 export function similarity(column: any, value: string): SQL {
     return sql`similarity(${column}, ${value})`;
+}
+
+/** pg_bigm 2-gram 相似度函数(东亚文字友好, 2 字词优于 trgm)：bigm_similarity(column, 'keyword') */
+export function bigmSimilarity(column: any, value: string): SQL {
+    return sql`bigm_similarity(${column}, ${value})`;
 }
 
 /** PostgreSQL 当前时间戳（SQL 标准，时区感知） */

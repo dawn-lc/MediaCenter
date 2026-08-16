@@ -19,6 +19,11 @@
 @import './components/feedback.css';
 @import './components/table.css';
 @import './components/player.css';
+@import './components/dashboard.css';
+@import './components/profile.css';
+@import './components/user.css';
+@import './components/author.css';
+@import './components/theme-toggle.css';
 
 /* 3. 响应式 — 覆盖以上所有规则 */
 @import './responsive.css';

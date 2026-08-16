@@ -205,9 +205,9 @@ export default function PlaylistSidebar({ media }: Props) {
         <div className="player-sidebar">
             <div className="card sidebar-card">
                 <div className="sidebar-title">
-                    <span>{t('player.playlist')} <span className="sidebar-count">({total.toLocaleString()})</span></span>
+                    <span>{t('view.playlist')} <span className="sidebar-count">({total.toLocaleString()})</span></span>
                     <button className="btn btn-secondary btn-sm" onClick={clearPlaylist}>
-                        {t('player.clearList')}
+                        {t('view.clearList')}
                     </button>
                 </div>
 

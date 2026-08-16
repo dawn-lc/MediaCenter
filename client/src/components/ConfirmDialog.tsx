@@ -65,7 +65,7 @@ export default function ConfirmDialog() {
                 </>
             }
         >
-            <p className="text-sm" style={{ margin: 0 }}>{config.message}</p>
+            <p className="text-sm" style={{ margin: 0, whiteSpace: 'pre-line' }}>{config.message}</p>
         </Modal>
     );
 }

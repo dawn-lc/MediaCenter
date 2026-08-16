@@ -79,7 +79,13 @@ export const BYTE_BASE = 1024;
 export const BYTE_UNITS: readonly string[] = ['B', 'KB', 'MB', 'GB', 'TB'];
 /** 「刚刚」时间阈值（毫秒） */
 export const JUST_NOW_THRESHOLD_MS = 60_000;
-/** 标签表达式最大长度 */
-export const TAG_EXPR_MAX_LENGTH = 200;
-/** 标签表达式最大嵌套深度 */
-export const TAG_EXPR_MAX_DEPTH = 20;
+/**
+ * 标签表达式最大长度（字符）
+ * ⚠️ 必须与后端 src/config.ts 中 maxExprLength 保持一致
+ */
+export const TAG_EXPR_MAX_LENGTH = 512;
+/**
+ * 标签表达式最大嵌套深度
+ * ⚠️ 必须与后端 src/config.ts 中 maxDepth 保持一致
+ */
+export const TAG_EXPR_MAX_DEPTH = 32;

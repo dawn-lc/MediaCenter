@@ -22,6 +22,7 @@ export default function VideoPlayer({ media }: Props) {
     const autoPlayVideo = playerSettings.autoPlayVideo;
     const savedPlaybackRate = playerSettings.playbackRate;
     const savedVolume = playerSettings.volume;
+    const savedMuted = playerSettings.muted;
     const { streamUrl } = useStreamToken(media.id, media.streamUrl);
     // 竖屏视频限制宽度（px），null 表示不限制
     const [portraitMaxWidth, setPortraitMaxWidth] = useState<number | null>(null);
@@ -49,6 +50,9 @@ export default function VideoPlayer({ media }: Props) {
 
                 // 应用持久化的音量
                 player.volume(savedVolume);
+
+                // 应用持久化的静音状态
+                player.muted(savedMuted);
 
                 // 视频全屏/退出时通知 PWAProvider 释放/恢复方向锁
                 player.on('fullscreenchange', () => {
@@ -81,10 +85,10 @@ export default function VideoPlayer({ media }: Props) {
                     if (err.code !== 3 && await refreshStream()) return;
                     let errMsg: string;
                     switch (err.code) {
-                        case 4: errMsg = t('player.errorFormatUnsupported', { mimeType: media.mimeType }); break;
-                        case 3: errMsg = t('player.errorDecodeFailed'); break;
-                        case 2: errMsg = t('player.errorNetwork'); break;
-                        default: errMsg = t('player.errorUnknown', { code: err.code, message: err.message || '' }); break;
+                        case 4: errMsg = t('view.errorFormatUnsupported', { mimeType: media.mimeType }); break;
+                        case 3: errMsg = t('view.errorDecodeFailed'); break;
+                        case 2: errMsg = t('view.errorNetwork'); break;
+                        default: errMsg = t('view.errorUnknown', { code: err.code, message: err.message || '' }); break;
                     }
                     console.error('[VideoPlayer] 播放错误:', errMsg, err);
                 });
@@ -97,11 +101,17 @@ export default function VideoPlayer({ media }: Props) {
                     }
                 });
 
-                // 监听音量变化并持久化
+                // 监听音量/静音变化并持久化
+                // 注意：video.js 的 muted 变化只会触发 volumechange 事件（实测 mutedchange 不触发），
+                // 因此 muted 同步并入这里处理；muted 时 player.volume() 仍返回实际音量值，不会误写
                 player.on('volumechange', () => {
                     const vol = player.volume() ?? 1;
                     if (vol !== usePlayerSettings.getState().volume) {
                         usePlayerSettings.getState().setVolume(vol);
+                    }
+                    const muted = player.muted() ?? false;
+                    if (muted !== usePlayerSettings.getState().muted) {
+                        usePlayerSettings.getState().setMuted(muted);
                     }
                 });
                 // 加载元数据后处理非标准分辨率适配

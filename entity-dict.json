@@ -5,7 +5,8 @@
       "原神",
       "Genshin Impact",
       "Genshin",
-      "げんしん"
+      "げんしん",
+      "原"
     ]
   },
   {
@@ -17,7 +18,10 @@
       "崩壊スターレイル",
       "Honkai Star Rail",
       "Honkai: Star Rail",
-      "HSR"
+      "HSR",
+      "崩铁",
+      "星铁",
+      "星穹"
     ]
   },
   {
@@ -28,7 +32,9 @@
       "崩壊3rd",
       "Honkai Impact",
       "Honkai Impact 3rd",
-      "崩坏三"
+      "崩坏三",
+      "崩三",
+      "崩3"
     ]
   },
   {
@@ -37,7 +43,9 @@
       "碧蓝航线",
       "碧藍航線",
       "アズールレーン",
-      "Azur Lane"
+      "Azur Lane",
+      "舰B",
+      "碧蓝"
     ]
   },
   {
@@ -45,7 +53,10 @@
     "names": [
       "明日方舟",
       "アークナイツ",
-      "Arknights"
+      "Arknights",
+      "粥",
+      "粥游",
+      "方舟"
     ]
   },
   {
@@ -54,7 +65,8 @@
       "少女前线",
       "ドールズフロントライン",
       "Girls' Frontline",
-      "Girls Frontline"
+      "Girls Frontline",
+      "少前"
     ]
   },
   {
@@ -95,7 +107,8 @@
       "东方Project",
       "Touhou Project",
       "Touhou",
-      "東方"
+      "東方",
+      "车万"
     ]
   },
   {
@@ -105,7 +118,9 @@
       "艦これ",
       "Kancolle",
       "KanColle",
-      "舰队Collection"
+      "舰队Collection",
+      "舰C",
+      "舰娘"
     ]
   },
   {
@@ -114,7 +129,8 @@
       "赛马娘",
       "ウマ娘",
       "Uma Musume",
-      "Umamusume"
+      "Umamusume",
+      "马娘"
     ]
   },
   {
@@ -265,7 +281,8 @@
       "NIKKE",
       "妮姬",
       "勝利の女神",
-      "Goddess of Victory"
+      "Goddess of Victory",
+      "胜利女神"
     ]
   },
   {
@@ -274,7 +291,9 @@
       "蔚蓝档案",
       "ブルーアーカイブ",
       "Blue Archive",
-      "档案"
+      "档案",
+      "蔚蓝",
+      "BA"
     ]
   },
   {
@@ -283,7 +302,8 @@
       "绝区零",
       "ゼンレスゾーンゼロ",
       "Zenless Zone Zero",
-      "ZZZ"
+      "ZZZ",
+      "绝区"
     ]
   },
   {
@@ -828,6 +848,7 @@
     "id": "kafka",
     "names": [
       "卡芙卡",
+      "卡夫卡",
       "カフカ",
       "Kafka"
     ]
@@ -25206,7 +25227,9 @@
       "ersha",
       "艾尔莎",
       "莎莎",
-      "大白猫"
+      "大白猫",
+      "吱哇乱叫",
+      "臭宝"
     ]
   },
   {

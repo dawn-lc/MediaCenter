@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
-import { eq, count, like, or, sql } from 'drizzle-orm';
+import { eq, count, like, or, sql, desc, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { validate } from 'uuid';
 import { isString, isNotEmpty, isArray, isUndefined } from '../utils/env';
+import { invalidateSearchCache } from '../utils/searchCache';
 
 /**
  * 获取标签列表（支持分页和搜索）
@@ -15,6 +16,17 @@ export async function listTags(req: Request, res: Response): Promise<void> {
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
         const offset = (page - 1) * limit;
         const search = (req.query.search as string)?.trim();
+        // 排序：name | mediaCount | createdAt
+        const sortBy = isString(req.query.sortBy) ? req.query.sortBy : 'name';
+        const sortOrder = isString(req.query.sortOrder) && req.query.sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
+        let orderBy: SQL;
+        if (sortBy === 'mediaCount') {
+            orderBy = sortOrder === 'asc' ? sql`count(${schema.mediaTags.tagId}) asc` : sql`count(${schema.mediaTags.tagId}) desc`;
+        } else if (sortBy === 'createdAt') {
+            orderBy = sortOrder === 'asc' ? schema.tags.createdAt : desc(schema.tags.createdAt);
+        } else {
+            orderBy = sortOrder === 'asc' ? schema.tags.name : desc(schema.tags.name);
+        }
 
         // 构建 WHERE 条件：搜索名称或别名
         const where = search
@@ -46,7 +58,7 @@ export async function listTags(req: Request, res: Response): Promise<void> {
             .leftJoin(schema.mediaTags, eq(schema.tags.id, schema.mediaTags.tagId))
             .where(where)
             .groupBy(schema.tags.id, schema.tags.name, schema.tags.altNames, schema.tags.createdAt)
-            .orderBy(schema.tags.name)
+            .orderBy(orderBy)
             .limit(limit)
             .offset(offset)
             .execute();
@@ -123,6 +135,7 @@ export async function deleteTag(req: Request, res: Response): Promise<void> {
 
         await db.delete(schema.tags).where(eq(schema.tags.id, id)).execute();
 
+        invalidateSearchCache();
         res.json({ message: 'admin.tagDeleted' });
     } catch (err) {
         console.error('[Tags] 删除失败:', err);

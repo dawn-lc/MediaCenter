@@ -247,21 +247,27 @@
 
 /* ── 徽章 ── */
 .badge-danger {
-    background: rgba(255, 107, 107, 0.2);
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
     color: var(--danger);
-    border: 1px solid rgba(255, 107, 107, 0.3);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .badge-success {
-    background: rgba(46, 204, 113, 0.15);
-    color: #2ecc71;
-    border: 1px solid rgba(46, 204, 113, 0.3);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+    border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 .badge-warning {
-    background: rgba(255, 193, 7, 0.15);
-    color: #ffc107;
-    border: 1px solid rgba(255, 193, 7, 0.3);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    color: var(--warning-strong);
+    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+}
+
+.badge-info {
+    background: color-mix(in srgb, var(--primary) 15%, transparent);
+    color: var(--primary-light);
+    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 /* ── 错误消息 ── */
@@ -287,7 +293,7 @@
 /* ── 非信任图片触发器 ── */
 .untrusted-trigger {
     cursor: pointer;
-    color: var(--color-link, #069);
+    color: var(--primary-light);
 }
 
 /* ── 缩略图占位图标 ── */

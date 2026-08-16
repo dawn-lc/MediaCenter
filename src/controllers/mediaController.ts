@@ -2,10 +2,9 @@ import type { Request, Response } from 'express';
 import { v4 as uuidv4, validate } from 'uuid';
 import { basename, extname, dirname, join } from 'path';
 import { rename, stat } from 'fs/promises';
-import { eq, ilike, and, or, desc, count, sql, inArray, notInArray, isNull, cosineDistance, avg, max, gte, type SQL } from 'drizzle-orm';
+import { eq, ilike, and, or, desc, count, sum, sql, inArray, notInArray, isNull, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { similarity } from '../db/index';
-import { getQueryEmbeddings, isEmbeddingColumnAvailable, embedMediaTitle, hasEmbeddings } from '../utils/embedding';
 import { deleteFile, isSupportedMimeType } from '../utils/storage';
 import mime from 'mime-types';
 import { generateSignedUrl } from '../utils/signUrl';
@@ -17,6 +16,7 @@ import { probeMedia, serializeMediaInfo, type MediaInfo } from '../utils/ffprobe
 import { resolveBestMimeType } from '../utils/mimeType';
 import config from '../config';
 import { isString, isNumber, isArray, isNotEmpty, isPresent, isNullOrUndefined, isUndefined, toNumberOrNull, toStringOrNull, createPicker, prune, checkFileExists } from '../utils/env';
+import { serverEvents } from '../utils/serverEvents';
 
 // ========== 表达式求值器（标签 / 作者维度）==========
 
@@ -186,22 +186,6 @@ async function resolveAuthorId(name: string | undefined, userRole: string): Prom
 }
 
 /**
- * 媒体列表项(列表渲染字段); relevance 仅在语义搜索模式下附加
- */
-interface MediaListItem {
-    id: string;
-    title: string;
-    fileSize: number;
-    mimeType: string;
-    duration: number | null;
-    thumbPath: string | null;
-    fileHash: string | null;
-    deletedAt: string | null;
-    createdAt: string;
-    relevance?: number;
-}
-
-/**
  * 获取媒体列表（支持分页和过滤）
  * GET /api/media?page=1&limit=20&type=video&search=keyword&sortBy=title&sortOrder=asc
  */
@@ -223,6 +207,7 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
         const tagsExpr = isString(req.query.tags) ? req.query.tags : undefined;
         const authorExpr = isString(req.query.authorExpr) ? req.query.authorExpr : undefined;
         const uploaderId = isString(req.query.uploaderId) ? req.query.uploaderId : undefined;
+        const authorId = isString(req.query.authorId) ? req.query.authorId : undefined;
         const sortBy = isString(req.query.sortBy) ? req.query.sortBy : 'createdAt';
         const sortOrder = isString(req.query.sortOrder) && req.query.sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
@@ -237,21 +222,8 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
             conditions.push(ilike(schema.media.mimeType, `${type}/%`));
         }
 
-        // 语义搜索：仅相关性排序时启用。查询向量成功 + embedding 列存在 → 走向量召回(不限制 ilike 硬匹配)；
-        // 否则回退 pg_trgm(ilike 过滤 + similarity 排序)。
-        let queryVecs: number[][] | null = null;
-        let semanticMode = false;
         if (search) {
-            if (sortBy === 'relevance') {
-                queryVecs = await getQueryEmbeddings(search);
-                // 语义模式需要: 列存在 + 已有回填向量(全 NULL 时 HNSW 返回空 → 回退 trgm)
-                if (queryVecs && queryVecs.length > 0 && (await isEmbeddingColumnAvailable()) && (await hasEmbeddings())) {
-                    semanticMode = true;
-                }
-            }
-            if (!semanticMode) {
-                conditions.push(or(ilike(schema.media.title, `%${search}%`), ilike(schema.media.description, `%${search}%`))!);
-            }
+            conditions.push(or(ilike(schema.media.title, `%${search}%`), ilike(schema.media.description, `%${search}%`))!);
         }
 
         if (fileHash) {
@@ -341,6 +313,10 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
             conditions.push(eq(schema.media.uploaderId, uploaderId));
         }
 
+        if (authorId) {
+            conditions.push(eq(schema.media.authorId, authorId));
+        }
+
         // 按角色过滤可见的媒体
         // guest → 仅公开；user → 公开 + 登录用户 + 自己的 owner；admin → 全部
         const userRole = req.user?.role ?? 'guest';
@@ -359,13 +335,12 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
         // 查询总数
         const countResult = await db.select({ total: count() }).from(schema.media).where(where).execute();
 
-        let total = Number(countResult[0]?.total || 0);
+        const total = Number(countResult[0]?.total || 0);
 
         // 排序：始终按客户端指定的排序字段和顺序
         let orderBy: SQL;
         if (sortBy === 'relevance' && search) {
-            // 语义模式走下方"多路检索 + RRF 合并"(不走单路排序); 未进入语义模式时回退 pg_trgm 相似度
-            orderBy = semanticMode ? sql`1` : desc(similarity(schema.media.title, search));
+            orderBy = desc(similarity(schema.media.title, search));
         } else {
             const sortMap: Record<string, any> = {
                 title: schema.media.title,
@@ -377,123 +352,34 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
             orderBy = sortOrder === 'asc' ? orderColumn : desc(orderColumn);
         }
 
-        // 查询列表（仅返回列表渲染必需字段）；语义模式下附加 relevance 评分
-        const selectFields: Record<string, unknown> = {
-            id: schema.media.id,
-            title: schema.media.title,
-            fileSize: schema.media.fileSize,
-            mimeType: schema.media.mimeType,
-            duration: schema.media.duration,
-            thumbPath: schema.media.thumbPath,
-            fileHash: schema.media.fileHash,
-            deletedAt: schema.media.deletedAt,
-            createdAt: schema.media.createdAt
-        };
+        // 查询列表（仅返回列表渲染必需字段）
+        let query = db
+            .select({
+                id: schema.media.id,
+                title: schema.media.title,
+                fileSize: schema.media.fileSize,
+                mimeType: schema.media.mimeType,
+                duration: schema.media.duration,
+                thumbPath: schema.media.thumbPath,
+                fileHash: schema.media.fileHash,
+                deletedAt: schema.media.deletedAt,
+                createdAt: schema.media.createdAt,
+                uploaderId: schema.media.uploaderId,
+                uploaderName: schema.users.username,
+                authorId: schema.media.authorId,
+                authorName: schema.authors.name
+            })
+            .from(schema.media)
+            .leftJoin(schema.users, eq(schema.media.uploaderId, schema.users.id))
+            .leftJoin(schema.authors, eq(schema.media.authorId, schema.authors.id))
+            .where(where)
+            .orderBy(orderBy);
 
-        let allItems: MediaListItem[];
-        if (semanticMode && queryVecs) {
-            // ===== 语义模式: 混合检索(trgm 关键词 + 向量语义 → RRF 融合) =====
-            // 主流搜索引擎标准做法(ES/Vespa): 双通道召回 + RRF 融合。
-            // - 向量通道: embedding 全库扫描, 动态统计阈值过滤(mean+σ*k), 语义召回。
-            // - 关键词通道: pg_trgm 标题相似度, 保证"字面命中"(标题含查询词必靠前)。
-            // - RRF 融合: Σ 1/(k+rank), 无参数, CPU 零负担(DB 内计算)。
-            // 阈值遵循统计学规律, 对任意查询一视同仁, 不做针对查询的特调。
-            const relExprs = queryVecs.map(
-                (v) => sql`1 - (${schema.media.embedding} <=> ${JSON.stringify(v)}::vector)`
-            );
-            const relevanceExpr =
-                relExprs.length === 1 ? relExprs[0] : sql`GREATEST(${sql.join(relExprs, sql`, `)})`;
-            // 1. 统计 best-route 相似度分布(avg/max 用 drizzle 内置聚合; stddev 为 PG 特有, drizzle 未封装, 用 sql 模板)
-            let threshold = config.semanticMinRelevance;
-            try {
-                const statRes = await db
-                    .select({
-                        m: avg(relevanceExpr),
-                        s: sql<number>`stddev(${relevanceExpr})::float8`,
-                        mx: max(relevanceExpr)
-                    })
-                    .from(schema.media)
-                    .execute();
-                const { m, s, mx } = statRes[0];
-                // 动态阈值 = mean + σ*倍数(k, 默认 3), 夹在 [下限, 0.9*max](avg/max 为 numeric 转 number)
-                threshold = Math.min(Math.max(Number(m) + config.semanticSigmaMultiplier * Number(s), config.semanticMinRelevance), Number(mx) * 0.9);
-            } catch (e) {
-                console.warn('[Media] 相关性分布统计失败, 使用下限阈值:', e instanceof Error ? e.message : e);
-            }
-            // 2. 按动态阈值过滤(粗召回, 全量候选, 不设上限) + 窗口函数取真实总数
-            //    count(*) OVER(): 同一查询内返回满足阈值的总行数, 保证分页正确。
-            //    (窗口函数 drizzle 无封装, 用 sql 模板; 阈值过滤/排序用 ORM 的 gte/desc)
-            const rows = (await db
-                .select({
-                    ...selectFields,
-                    relevance: relevanceExpr,
-                    totalCount: sql<number>`count(*) OVER()`
-                } as never)
-                .from(schema.media)
-                .where(where ? and(where, gte(relevanceExpr, threshold)) : gte(relevanceExpr, threshold))
-                .orderBy(desc(relevanceExpr))
-                .execute()) as unknown as (MediaListItem & { totalCount: number })[];
-            // 语义检索实际结果数 = 满足阈值的真实条目数(来自窗口函数, 非 LIMIT 后的行数)
-            total = rows.length > 0 ? Number(rows[0].totalCount) : 0;
-            // 剥离 totalCount 辅助字段(不返回给前端)
-            rows.forEach((r) => {
-                delete (r as unknown as Record<string, unknown>).totalCount;
-            });
-            // 3. RRF 混合检索融合: trgm(关键词) 通道 + 向量(语义) 通道 → 融合排序。
-            //    主流搜索引擎标准做法(ES/Vespa): 关键词通道保证"字面命中"(标题含查询词必靠前),
-            //    向量通道补充"语义相关但无字面词"(如英文 Ganyu 标题)。RRF = Σ 1/(k+rank) 无参融合。
-            //    注意: pg_trgm 按 3-gram 切分, 2 字中文词(如"甘雨")无法形成 trigram,
-            //    故关键词通道用 ilike 精确命中(含查询词即入通道), 而非仅 trgm 数值。
-            const RRF_K = config.rrfK;
-            if (search && rows.length > 0) {
-                // 3a. 关键词通道: 标题字面含查询词(ilike 精确匹配) → 按 trgm 相似度排序
-                const kwRows = (await db
-                    .select({
-                        id: schema.media.id,
-                        trgmSim: similarity(schema.media.title, search)
-                    })
-                    .from(schema.media)
-                    .where(
-                        and(
-                            inArray(schema.media.id, rows.map((r) => r.id)),
-                            ilike(schema.media.title, `%${search}%`)
-                        )
-                    )
-                    .orderBy(desc(similarity(schema.media.title, search)))
-                    .execute()) as { id: string; trgmSim: number }[];
-                // 3b. 两路排名表(rank 从 0 开始, RRF 用 1/(k+rank+1))
-                const vecRank = new Map<string, number>();
-                rows.forEach((r, i) => vecRank.set(r.id, i));
-                const kwRank = new Map<string, number>();
-                kwRows.forEach((r, i) => kwRank.set(r.id, i));
-                // 3c. 计算 RRF 融合分
-                for (const row of rows) {
-                    let score = 0;
-                    const vr = vecRank.get(row.id);
-                    const kr = kwRank.get(row.id);
-                    if (vr !== undefined) score += 1 / (RRF_K + vr + 1);
-                    if (kr !== undefined) score += 1 / (RRF_K + kr + 1);
-                    row.relevance = score;
-                }
-            }
-            // 4. 按 relevance 排序(尊重 sortOrder 升/降序), 再分页
-            rows.sort((a, b) => {
-                const diff = (a.relevance ?? -1) - (b.relevance ?? -1);
-                return sortOrder === 'asc' ? diff : -diff;
-            });
-            allItems = rows.slice(offset, noLimit ? undefined : offset + limit);
-        } else {
-            // ===== 普通/回退: 单路排序查询 =====
-            let query = db
-                .select(selectFields as never)
-                .from(schema.media)
-                .where(where)
-                .orderBy(orderBy);
-            if (!noLimit) {
-                query = query.limit(limit).offset(offset) as typeof query;
-            }
-            allItems = (await query.execute()) as unknown as MediaListItem[];
+        if (!noLimit) {
+            query = query.limit(limit).offset(offset) as typeof query;
         }
+
+        const allItems = await query.execute();
 
         // 批量加载标签
         const tagMap = await loadTagsForMedia(allItems.map((i) => i.id));
@@ -514,11 +400,8 @@ export async function listMedia(req: Request, res: Response): Promise<void> {
             });
         });
 
-        // 总数语义:
-        // - 语义模式: total 已由窗口函数(count(*) OVER())给出满足阈值的真实候选数,
-        //   即使 noLimit 也返回该真实值(而非精排后返回的候选条数, 避免 500 截断误报)。
-        // - 普通模式: noLimit 时返回实际返回条数, 否则返回过滤后总数。
-        const filteredTotal = semanticMode ? total : noLimit ? allItems.length : total;
+        // filteredTotal 在无 limit 时返回总数，否则返回当前页过滤后的数量（近似）
+        const filteredTotal = noLimit ? allItems.length : total;
 
         res.json({
             items: itemsWithUrls,
@@ -717,7 +600,7 @@ async function checkDuplicate(fileHash: string | null): Promise<{ id: string; ti
     return row ?? null;
 }
 
-/** 解析 uploaderId：API 令牌无用户 ID 时回退为首个管理员 */
+/** 解析 uploaderId：无用户 ID 时（如流式签名身份/异常场景）回退为首个管理员 */
 async function resolveUploaderId(req: Request): Promise<string> {
     if (req.user!.id) return req.user!.id;
     const db = getDatabase();
@@ -770,12 +653,11 @@ async function createMediaRecord(
     // 注意：创建记录时文件可能仍在下载中（仅部分写入），此时 stat 会得到不完整大小，
     // 且非 0 的部分大小不会被 streamController 的 fileSize===0 修正逻辑覆盖，
     // 因此这里不 stat，保持调用方传入值（缺失时为 0），由下载完成后的 updateMedia 兜底修正。
-    const recordTitle = basename(params.originalname, extname(params.originalname)).slice(0, config.maxTitleLength);
     await db
         .insert(schema.media)
         .values({
             id,
-            title: recordTitle,
+            title: basename(params.originalname, extname(params.originalname)).slice(0, config.maxTitleLength),
             description: '',
             fileName: params.originalname,
             filePath: params.filePath,
@@ -790,8 +672,13 @@ async function createMediaRecord(
         } satisfies typeof schema.media.$inferInsert)
         .execute();
 
-    // 增量嵌入: 新媒体自动生成标题向量(尽力而为, 未配置 EMBEDDING_BASE_URL / 无列 / 失败则保持 NULL 待回填)
-    await embedMediaTitle(id, recordTitle);
+    // 新增媒体（上传/导入）默认 owner 可见：推送给管理员（触发者本人除外）
+    serverEvents.emit('media.updated', {
+        type: 'created',
+        actorId: req.user?.id,
+        mediaId: id,
+        visibility: { uploaderId, minRole: 'owner' }
+    });
 
     return id;
 }
@@ -933,9 +820,7 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             .select({
                 uploaderId: schema.media.uploaderId,
                 filePath: schema.media.filePath,
-                mimeType: schema.media.mimeType,
-                mediaInfo: schema.media.mediaInfo,
-                fileSize: schema.media.fileSize
+                mimeType: schema.media.mimeType
             })
             .from(schema.media)
             .where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined))
@@ -1003,40 +888,26 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // 探测媒体信息：仅当 文件/类型变化 或 尚无 mediaInfo(如创建时文件不完整) 才执行 ffprobe；
-        // 否则复用已有媒体信息，避免标题/标签类更新时无谓的 ffprobe 开销
+        // 探测媒体信息并并入 updates（先 probe，再一次 DB 写入）
         const targetFilePath = (updates.filePath as string) ?? mediaRecord.filePath;
         const targetMimeType = (updates.mimeType as string) ?? mediaRecord.mimeType;
-        const needsProbe = 'filePath' in updates || 'mimeType' in updates || !mediaRecord.mediaInfo;
-        if (needsProbe) {
-            const probe = await probeMediaFile(targetFilePath, targetMimeType);
-            if (probe) {
-                updates.duration = probe.info.duration;
-                updates.mimeType = probe.bestMimeType;
-                updates.mediaInfo = probe.serialized;
-            }
+        const probe = await probeMediaFile(targetFilePath, targetMimeType);
+        if (probe) {
+            updates.duration = probe.info.duration;
+            updates.mimeType = probe.bestMimeType;
+            updates.mediaInfo = probe.serialized;
         }
 
-        // 以本地实际文件为准：stat 读取真实大小（调用方传入的 fileSize 可能不准）。
-        // 仅当 文件路径变化 或 记录中 fileSize 仍为 0（创建时文件不完整，待下载完成后兜底修正）才 stat，
-        // 避免标题/标签类更新时无谓的 stat 开销
-        const needSizeSync = 'filePath' in updates || mediaRecord.fileSize === 0;
-        if (needSizeSync) {
-            try {
-                const fileStat = await stat(targetFilePath);
-                updates.fileSize = fileStat.size;
-            } catch { /* 文件不存在或不可读时保持原值 */ }
-        }
+        // 以本地实际文件为准：stat 读取真实大小（调用方传入的 fileSize 可能不准）
+        try {
+            const fileStat = await stat(targetFilePath);
+            updates.fileSize = fileStat.size;
+        } catch { /* 文件不存在或不可读时保持原值 */ }
 
         // 执行更新
         if (Object.keys(updates).length > 0) {
             if (isUndefined(updates.updatedAt)) updates.updatedAt = new Date().toISOString();
             await db.update(schema.media).set(updates).where(eq(schema.media.id, id)).execute();
-        }
-
-        // 标题变更时增量重嵌入(尽力而为, 失败保持原向量/留待回填)
-        if (isString(updates.title)) {
-            await embedMediaTitle(id, updates.title);
         }
 
         // 处理标签（上传者也可以管理标签）
@@ -1078,6 +949,17 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
         // 加载标签
         const tagMap = await loadTagsForMedia([id]);
         const tags = tagMap.get(id) || [];
+
+        // 推送更新事件（按更新后的可见性过滤；不推回给触发者本人）
+        serverEvents.emit('media.updated', {
+            type: 'updated',
+            actorId: req.user?.id,
+            mediaId: id,
+            visibility: {
+                uploaderId: updatedResult[0].uploaderId,
+                minRole: updatedResult[0].minRole
+            }
+        });
 
         const { authorId: resId, authorName: resName, authorAltNames: resAlt, authorUrls: resUrls, thumbPath: resThumb, ...mediaData } = updatedResult[0];
 
@@ -1124,6 +1006,7 @@ export async function deleteMedia(req: Request, res: Response): Promise<void> {
         const existing = await db
             .select({
                 uploaderId: schema.media.uploaderId,
+                minRole: schema.media.minRole,
                 filePath: schema.media.filePath,
                 thumbPath: schema.media.thumbPath
             })
@@ -1160,6 +1043,17 @@ export async function deleteMedia(req: Request, res: Response): Promise<void> {
                 .execute();
         }
 
+        // 推送删除事件（按删除前的可见性过滤；不推回给触发者本人）
+        serverEvents.emit('media.updated', {
+            type: 'deleted',
+            actorId: req.user?.id,
+            mediaId: id,
+            visibility: {
+                uploaderId: mediaRecord.uploaderId,
+                minRole: mediaRecord.minRole
+            }
+        });
+
         res.json({ message: 'media.deleteSuccess' });
     } catch (err) {
         console.error('[Media] 删除失败:', err);
@@ -1187,7 +1081,11 @@ export async function restoreMedia(req: Request, res: Response): Promise<void> {
 
         const db = getDatabase();
         const [existing] = await db
-            .select({ deletedAt: schema.media.deletedAt })
+            .select({
+                deletedAt: schema.media.deletedAt,
+                minRole: schema.media.minRole,
+                uploaderId: schema.media.uploaderId
+            })
             .from(schema.media)
             .where(eq(schema.media.id, id))
             .limit(1)
@@ -1209,9 +1107,135 @@ export async function restoreMedia(req: Request, res: Response): Promise<void> {
             .where(eq(schema.media.id, id))
             .execute();
 
+        // 推送恢复事件（恢复后媒体重新可见 → 按可见性过滤；不推回给触发者本人）
+        serverEvents.emit('media.updated', {
+            type: 'restored',
+            actorId: req.user?.id,
+            mediaId: id,
+            visibility: { uploaderId: existing.uploaderId, minRole: existing.minRole }
+        });
+
         res.json({ message: 'media.restoreSuccess' });
     } catch (err) {
         console.error('[Media] 恢复失败:', err);
+        res.status(500).json({ error: 'error.internal' });
+    }
+}
+
+/**
+ * GET /api/media/stats
+ * 概览统计（媒体总数/按类型/总大小/标签/作者/用户数/最近上传）。
+ * 媒体维度按当前用户可见范围过滤（与 listMedia 一致）；
+ * 敏感字段（总大小/标签/作者/用户数）仅管理员可见，其余角色返回 null。
+ */
+export async function getStats(req: Request, res: Response): Promise<void> {
+    try {
+        const db = getDatabase();
+        // 与 listMedia 一致的可见性条件
+        const conditions: SQL[] = [];
+        if (req.user?.role !== 'admin') {
+            conditions.push(isNull(schema.media.deletedAt));
+        }
+        const userRole = req.user?.role ?? 'guest';
+        if (userRole !== 'admin') {
+            if (req.user?.id) {
+                // 已登录用户：guest + user + 自己的 owner
+                conditions.push(
+                    or(
+                        inArray(schema.media.minRole, ['guest', 'user']),
+                        and(eq(schema.media.minRole, 'owner'), eq(schema.media.uploaderId, req.user.id))
+                    )!
+                );
+            } else {
+                // 访客：仅公开媒体
+                conditions.push(eq(schema.media.minRole, 'guest'));
+            }
+        }
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+        // 媒体总数（按可见性过滤）；总大小仅管理员可见（存储规模属敏感信息）
+        const [agg] = await db
+            .select({ total: count(), totalSize: sum(schema.media.fileSize) })
+            .from(schema.media)
+            .where(where)
+            .execute();
+        const total = Number(agg?.total || 0);
+        const totalSize = Number(agg?.totalSize || 0);
+        const isAdmin = userRole === 'admin';
+
+        // 按类型计数（mimeType 前缀聚合）
+        const typeRows = await db
+            .select({ mimeType: schema.media.mimeType, c: count() })
+            .from(schema.media)
+            .where(where)
+            .groupBy(schema.media.mimeType)
+            .execute();
+        let video = 0;
+        let audio = 0;
+        let image = 0;
+        for (const row of typeRows) {
+            const m = (row.mimeType || '').toLowerCase();
+            const c = Number(row.c || 0);
+            if (m.startsWith('video/')) video += c;
+            else if (m.startsWith('audio/')) audio += c;
+            else if (m.startsWith('image/')) image += c;
+        }
+
+        // 标签 / 作者 / 用户数：仅管理员可见（全局规模信息，对非管理员敏感）
+        let tags: number | null = null;
+        let authors: number | null = null;
+        let users: number | null = null;
+        if (isAdmin) {
+            const [tagAgg, authorAgg, userAgg] = await Promise.all([
+                db.select({ total: count() }).from(schema.tags).execute(),
+                db.select({ total: count() }).from(schema.authors).execute(),
+                db.select({ total: count() }).from(schema.users).execute()
+            ]);
+            tags = Number(tagAgg?.[0]?.total || 0);
+            authors = Number(authorAgg?.[0]?.total || 0);
+            users = Number(userAgg?.[0]?.total || 0);
+        }
+
+        // 最近上传（可见范围内，最新 8 条，生成签名链接 + 标签）
+        const recentRows = await db
+            .select({
+                id: schema.media.id,
+                title: schema.media.title,
+                mimeType: schema.media.mimeType,
+                fileSize: schema.media.fileSize,
+                duration: schema.media.duration,
+                thumbPath: schema.media.thumbPath,
+                createdAt: schema.media.createdAt
+            })
+            .from(schema.media)
+            .where(where)
+            .orderBy(desc(schema.media.createdAt))
+            .limit(8)
+            .execute();
+
+        // 批量加载标签
+        const recentTagMap = await loadTagsForMedia(recentRows.map((i) => i.id));
+        const recent = recentRows.map((item) => {
+            const { thumbPath, ...rest } = item;
+            return prune({
+                ...rest,
+                tags: recentTagMap.get(item.id) || [],
+                streamUrl: generateSignedUrl(item.id, 'stream', req.user?.id || null, { role: req.user?.role }),
+                thumbUrl: thumbPath
+                    ? generateSignedUrl(item.id, 'thumb', req.user?.id || null, { expiresIn: 24 * 3600, role: req.user?.role })
+                    : null
+            });
+        });
+
+        res.json({
+            media: { total, video, audio, image, totalSize: isAdmin ? totalSize : null },
+            tags,
+            authors,
+            users,
+            recent
+        });
+    } catch (err) {
+        console.error('[Media] 获取统计失败:', err);
         res.status(500).json({ error: 'error.internal' });
     }
 }

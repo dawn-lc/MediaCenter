@@ -7,9 +7,8 @@ import { Api } from '../api';
 import type { PlayMode } from '../stores/playlist';
 import type { Media } from '../types';
 import { getMediaType } from '../utils';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
 import Modal from '../components/Modal';
-import { TOAST_DURATION } from '../config';
 
 interface Props {
     media: Media;
@@ -71,11 +70,11 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const saveDuration = () => {
         const val = durationInput === '' ? 0 : Number(durationInput);
         if (isNaN(val) || val < 0) {
-            toast.error(t('player.durationError'));
+            notify.error(t('view.durationError'));
             return;
         }
         usePlayerSettings.getState().setStaticImageDuration(val);
-        toast.success(t('player.durationSaved'));
+        notify.success(t('view.durationSaved'));
         setShowDuration(false);
     };
 
@@ -120,18 +119,17 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                 case 'Delete':
                     if (useAuthStore.getState().isAdmin) {
                         e.preventDefault();
-                        Api.deleteMedia(media.id)
-                            .then(() => {
-                                toast.success(t('player.deleteSuccess'));
+                        notify.promise(Api.deleteMedia(media.id), {
+                            loading: t('view.deleting'),
+                            success: t('view.deleteSuccess'),
+                            onSuccess: () => {
                                 const removed = usePlaylistStore.getState().removeById(media.id);
                                 // removeById 已自动将 currentIndex 更新到下一项，无需再 goNext
                                 if (removed === null) {
                                     window.location.href = '/';
                                 }
-                            })
-                            .catch((err: Error) => {
-                                toast.error(err.message || t('player.deleteFailed'), { duration: TOAST_DURATION });
-                            });
+                            }
+                        });
                     }
                     break;
             }
@@ -145,33 +143,33 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
             <div className="player-controls">
                 <div className="player-controls-left">
                     <button className="btn btn-secondary btn-sm" disabled={!hasPrev} onClick={goPrev}>
-                        ⏮ {t('player.prev')}
+                        ⏮ {t('view.prev')}
                     </button>
                     <button className="btn btn-secondary btn-sm" disabled={!hasNext} onClick={goNext}>
-                        {t('player.next')} ⏭
+                        {t('view.next')} ⏭
                     </button>
                     {getMediaType(media.mimeType) === 'image' && (
-                        <button className="btn btn-secondary btn-sm" onClick={openDurationEdit} title={t('player.setPlayDuration')}>
+                        <button className="btn btn-secondary btn-sm" onClick={openDurationEdit} title={t('view.setPlayDuration')}>
                             {countdown > 0
-                                ? t('player.timerSeconds', { n: countdown })
+                                ? t('view.timerSeconds', { n: countdown })
                                 : playerSettings.staticImageDuration > 0
-                                    ? t('player.timerSeconds', {
+                                    ? t('view.timerSeconds', {
                                         n: playerSettings.staticImageDuration
                                     })
-                                    : t('player.timing')}
+                                    : t('view.timing')}
                         </button>
                     )}
                 </div>
                 <div className="player-controls-right">
                     <button className="btn btn-secondary btn-sm" onClick={cycleMode}>
-                        {t(`player.mode${playMode.charAt(0).toUpperCase()}${playMode.slice(1)}`)}
+                        {t(`view.mode${playMode.charAt(0).toUpperCase()}${playMode.slice(1)}`)}
                     </button>
                 </div>
             </div>
 
             <Modal
                 open={showDuration}
-                title={t('player.setPlayDuration')}
+                title={t('view.setPlayDuration')}
                 onClose={() => setShowDuration(false)}
                 footer={
                     <>
@@ -184,14 +182,14 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                     </>
                 }
             >
-                <p className="text-sm text-secondary mb-16">{t('player.staticImageDurationHint')}</p>
+                <p className="text-sm text-secondary mb-16">{t('view.staticImageDurationHint')}</p>
                 <input
                     className="form-input"
                     type="number"
                     min="0"
                     value={durationInput}
                     onChange={(e) => setDurationInput(e.target.value)}
-                    placeholder={t('player.timing')}
+                    placeholder={t('view.timing')}
                     autoFocus
                 />
             </Modal>

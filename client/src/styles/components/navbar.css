@@ -129,7 +129,7 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow);
     min-width: 160px;
     padding: 6px;
     z-index: 300;
@@ -154,12 +154,14 @@
     white-space: nowrap;
 }
 
-.nav-user-dropdown .dropdown-item {
+/* 下拉项：高特异性（0,4,0）覆盖 .navbar-nav a / button:not(...)（含 :not 计数后为 0,3,1）的通用样式，保证 A 与 BUTTON 渲染一致对齐 */
+.navbar-nav .nav-user-menu .nav-user-dropdown .dropdown-item {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
     font-size: 14px;
+    line-height: 1.6;
     color: var(--text-primary);
     border-radius: 6px;
     cursor: pointer;
@@ -169,9 +171,10 @@
     width: 100%;
     text-align: left;
     font-family: inherit;
+    text-decoration: none;
 }
 
-.nav-user-dropdown .dropdown-item:hover {
+.navbar-nav .nav-user-menu .nav-user-dropdown .dropdown-item:hover {
     background: var(--bg-input);
     color: var(--text-primary);
 }
@@ -185,20 +188,12 @@
     color: var(--primary-light);
 }
 
-.nav-user-dropdown .dropdown-item.danger {
+.navbar-nav .nav-user-menu .nav-user-dropdown .dropdown-item.danger {
     color: var(--danger);
 }
 
-.nav-user-dropdown .dropdown-item.danger:hover {
+.navbar-nav .nav-user-menu .nav-user-dropdown .dropdown-item.danger:hover {
     background: rgba(255, 107, 107, 0.1);
-}
-
-/* 导航栏语言选择器 */
-.nav-lang-select {
-    width: auto;
-    margin-left: 4px;
-    font-size: 13px;
-    padding: 6px 32px 6px 10px;
 }
 
 .nav-user .user-info .user-name {
@@ -219,9 +214,9 @@
     flex-direction: column;
     justify-content: center;
     gap: 5px;
-    width: 36px;
-    height: 36px;
-    padding: 6px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
     border: none;
     background: transparent;
     cursor: pointer;

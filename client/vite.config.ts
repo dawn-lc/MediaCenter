@@ -62,6 +62,9 @@ export default defineConfig({
                 ],
             },
             workbox: {
+                // SW 更新后立即接管所有已打开的页面（否则新 SW 不控制旧页面，
+                // 缩略图 /thumb 等依赖 SW 服务的请求会落到后端 404）
+                clientsClaim: true,
                 globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'],
                 globIgnores: ['**/offline.html'],
                 runtimeCaching: [
@@ -114,7 +117,6 @@ export default defineConfig({
                     },
                 ],
                 skipWaiting: true,
-                clientsClaim: true,
                 cleanupOutdatedCaches: true,
             },
             selfDestroying: process.env.NODE_ENV === 'development',
@@ -142,7 +144,9 @@ export default defineConfig({
             : undefined,
         proxy: {
             '/api': {
-                target: `https://127.0.0.1${process.env.PORT ? `:${process.env.PORT}` : ""}`,
+                // 后端地址：默认宿主机的 443（docker 映射 443:3000）；
+                // 如后端跑在其它端口（如本地 tsx dev），用 VITE_API_PROXY 覆盖
+                target: process.env.VITE_API_PROXY ? String(process.env.VITE_API_PROXY) : 'https://127.0.0.1:443',
                 changeOrigin: true,
                 secure: false,
             },

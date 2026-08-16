@@ -140,6 +140,22 @@
     color: hsl(var(--tag-hue, 260), 50%, 85%) !important;
 }
 
+/* 浅色主题：浅底 + 深字，保证对比度 */
+@media (prefers-color-scheme: light) {
+    .tag-group-highlight {
+        background: hsl(var(--tag-hue, 260), 60%, 92%, 0.65) !important;
+        border-color: hsl(var(--tag-hue, 260), 55%, 45%, 0.55) !important;
+        color: hsl(var(--tag-hue, 260), 70%, 22%) !important;
+    }
+}
+
+/* 手动浅色（data-theme）同样生效 */
+html[data-theme='light'] .tag-group-highlight {
+    background: hsl(var(--tag-hue, 260), 60%, 92%, 0.65) !important;
+    border-color: hsl(var(--tag-hue, 260), 55%, 45%, 0.55) !important;
+    color: hsl(var(--tag-hue, 260), 70%, 22%) !important;
+}
+
 /* ========== 徽章 ========== */
 .badge {
     display: inline-block;
@@ -151,31 +167,31 @@
 }
 
 .badge-admin {
-    background: rgba(108, 92, 231, 0.2);
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
     color: var(--primary-light);
 }
 
 .badge-user {
-    background: rgba(0, 206, 201, 0.2);
+    background: color-mix(in srgb, var(--secondary) 20%, transparent);
     color: var(--secondary);
 }
 
 .badge-guest {
-    background: rgba(106, 106, 138, 0.2);
+    background: color-mix(in srgb, var(--text-muted) 20%, transparent);
     color: var(--text-muted);
 }
 
 .badge-video {
-    background: rgba(255, 107, 107, 0.2);
-    color: #ff6b6b;
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
 }
 
 .badge-audio {
-    background: rgba(81, 207, 102, 0.2);
-    color: #51cf66;
+    background: color-mix(in srgb, var(--success) 20%, transparent);
+    color: var(--success);
 }
 
 .badge-image {
-    background: rgba(255, 212, 59, 0.2);
-    color: #ffd43b;
+    background: color-mix(in srgb, var(--warning) 20%, transparent);
+    color: var(--warning);
 }

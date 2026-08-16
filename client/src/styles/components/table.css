@@ -40,6 +40,26 @@ table th {
     letter-spacing: 0.5px;
 }
 
+/* ========== 可排序表头 ========== */
+.col-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+
+.col-sortable:hover {
+    color: var(--text-primary);
+}
+
+.col-sortable-active {
+    color: var(--primary-light);
+}
+
+.sort-indicator {
+    font-weight: 700;
+}
+
 table tr:hover td {
     background: var(--bg-input);
 }
@@ -79,6 +99,21 @@ table tr.row-editing .form-textarea {
 
 .col-role-select {
     width: 110px;
+}
+
+/* 表格中的可点击名字链接（跳转公开主页） */
+.table-name-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--primary-light);
+    cursor: pointer;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.table-name-link:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
 }
 
 /* ========== 表格中的文本溢出 ========== */
@@ -159,4 +194,17 @@ table tr.row-editing .form-textarea {
     font-size: 13px;
     color: var(--text-muted);
     padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    user-select: none;
+}
+
+/* 移动端极简分页的页码指示（如 5 / 7132） */
+.pagination .pagination-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    padding: 0 4px;
+    user-select: none;
 }

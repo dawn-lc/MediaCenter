@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "i18next": "^26.3.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

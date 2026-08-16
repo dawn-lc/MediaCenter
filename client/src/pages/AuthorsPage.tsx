@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Api } from '../api';
 import type { Author } from '../types';
-import { toast } from 'sonner';
+import { notify } from '../utils/notify';
+import { useQuery } from '@tanstack/react-query';
 import AdminGuard from '../components/AdminGuard';
+import SortableTh from '../components/SortableTh';
 import LoadingState from '../components/LoadingState';
 import Pagination from '../components/Pagination';
 import { showConfirm } from '../components/ConfirmDialog';
@@ -22,59 +25,73 @@ interface EditingRow {
 
 export default function AuthorsPage() {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const [authors, setAuthors] = useState<Author[]>([]);
-    const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [newAuthorName, setNewAuthorName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('name');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [editing, setEditing] = useState<EditingRow | null>(null);
     const editRef = useRef<HTMLDivElement>(null);
-    const searchRef = useRef(searchQuery);
-    searchRef.current = searchQuery;
 
     useClickOutside(editRef, () => {
         if (editing && !editing.saving) setEditing(null);
     });
 
-    const loadAuthors = useCallback(async (pg: number, query: string) => {
-        setLoading(true);
-        try {
-            const data = await Api.listAuthors({ page: pg, limit: ADMIN_PAGE_SIZE, search: query || undefined });
-            setAuthors(data.authors || []);
-            if (data.pagination) {
-                setTotal(data.pagination.total);
-                setTotalPages(data.pagination.totalPages);
-            }
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const { data, isFetching, refetch } = useQuery({
+        queryKey: ['authors', page, searchQuery, sortBy, sortOrder],
+        queryFn: () =>
+            Api.listAuthors({
+                page,
+                limit: ADMIN_PAGE_SIZE,
+                search: searchQuery || undefined,
+                sortBy,
+                sortOrder
+            })
+    });
 
+    // 取数结果同步到页面状态
     useEffect(() => {
-        loadAuthors(page, searchRef.current);
-    }, [page, loadAuthors]);
+        if (!data) return;
+        setAuthors(data.authors || []);
+        if (data.pagination) {
+            setTotal(data.pagination.total);
+            setTotalPages(data.pagination.totalPages);
+        }
+    }, [data]);
 
     const handleSearchChange = (val: string) => {
         setSearchQuery(val);
         setPage(1);
     };
 
+    // 表头排序：同列切换方向，新列默认升序（媒体数/时间列默认降序）
+    const handleSort = (key: string) => {
+        if (sortBy === key) {
+            setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(key);
+            setSortOrder(key === 'mediaCount' ? 'desc' : 'asc');
+        }
+        setPage(1);
+    };
+
     const handleCreate = async () => {
         const name = newAuthorName.trim();
         if (!name) return;
-        try {
-            await Api.createAuthor(name);
-            toast.success(t('admin.authors.createSuccess'));
-            setNewAuthorName('');
-            setPage(1);
-            loadAuthors(1, searchRef.current);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.createFailed'));
-        }
+        await notify.promise(Api.createAuthor(name), {
+            loading: t('common.creating'),
+            success: t('admin.authors.createSuccess'),
+            onSuccess: () => {
+                setNewAuthorName('');
+                // 翻页会触发自动重取；已在第 1 页时手动刷新
+                if (page !== 1) setPage(1);
+                else void refetch();
+            }
+        });
     };
 
     const handleDelete = (author: Author) => {
@@ -82,15 +99,15 @@ export default function AuthorsPage() {
             message: t('admin.authors.confirmDelete', { name: author.name }),
             danger: true,
             onConfirm: async () => {
-                try {
-                    await Api.deleteAuthor(author.id);
-                    toast.success(t('admin.authorDeleted'));
-                    const nextPage = authors.length <= 1 && page > 1 ? page - 1 : page;
-                    setPage(nextPage);
-                    loadAuthors(nextPage, searchRef.current);
-                } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-                }
+                await notify.promise(Api.deleteAuthor(author.id), {
+                    loading: t('common.deleting'),
+                    success: t('admin.authorDeleted'),
+                    onSuccess: () => {
+                        const nextPage = authors.length <= 1 && page > 1 ? page - 1 : page;
+                        if (nextPage !== page) setPage(nextPage);
+                        else void refetch();
+                    }
+                });
             }
         });
     };
@@ -108,30 +125,27 @@ export default function AuthorsPage() {
     const saveEditing = async () => {
         if (!editing || editing.saving) return;
         setEditing((prev) => (prev ? { ...prev, saving: true } : null));
-        try {
-            const name = editing.name.trim();
-            const altParsed = editing.altNames
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean);
-            const urlParsed = editing.urls
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean);
+        const name = editing.name.trim();
+        const altParsed = editing.altNames
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const urlParsed = editing.urls
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean);
 
-            const data: { name?: string; altNames?: string[]; urls?: string[] } = {};
-            if (name) data.name = name;
-            data.altNames = altParsed;
-            data.urls = urlParsed;
+        const data: { name?: string; altNames?: string[]; urls?: string[] } = {};
+        if (name) data.name = name;
+        data.altNames = altParsed;
+        data.urls = urlParsed;
 
-            await Api.updateAuthor(editing.id, data);
-            toast.success(t('admin.authors.updateSuccess'));
-            setEditing(null);
-            loadAuthors(page, searchRef.current);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : t('common.loadFailed'));
-            setEditing((prev) => (prev ? { ...prev, saving: false } : null));
-        }
+        const ok = await notify.promise(Api.updateAuthor(editing.id, data), {
+            loading: t('common.saving'),
+            success: t('admin.authors.updateSuccess')
+        });
+        setEditing(ok ? null : (prev) => (prev ? { ...prev, saving: false } : null));
+        if (ok) void refetch();
     };
 
     const cancelEditing = () => {
@@ -175,7 +189,7 @@ export default function AuthorsPage() {
                         )}
                     </div>
 
-                    {loading ? (
+                    {isFetching ? (
                         <LoadingState />
                     ) : authors.length === 0 ? (
                         <p className="text-muted">{t('admin.authors.noAuthors')}</p>
@@ -185,10 +199,10 @@ export default function AuthorsPage() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th className="col-author-name">{t('admin.authors.colName')}</th>
+                                            <SortableTh label={t('admin.authors.colName')} sortKey="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="col-author-name" />
                                             <th className="col-altnames">{t('admin.authors.colAltNames')}</th>
                                             <th>{t('admin.authors.colUrls')}</th>
-                                            <th className="col-count">{t('admin.authors.colMediaCount')}</th>
+                                            <SortableTh label={t('admin.authors.colMediaCount')} sortKey="mediaCount" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="col-count" />
                                             <th className="col-actions">{t('admin.authors.colActions')}</th>
                                         </tr>
                                     </thead>
@@ -210,7 +224,13 @@ export default function AuthorsPage() {
                                                                 autoFocus
                                                             />
                                                         ) : (
-                                                            <span className="tag-badge">{author.name}</span>
+                                                            <span
+                                                                className="table-name-link"
+                                                                onClick={() => navigate('/author/' + encodeURIComponent(author.id))}
+                                                                title={t('admin.authors.colName')}
+                                                            >
+                                                                {author.name}
+                                                            </span>
                                                         )}
                                                     </td>
                                                     <td>
@@ -300,7 +320,7 @@ export default function AuthorsPage() {
                                                                         onClick={() => startEditing(author)}
                                                                         title={t('admin.authors.editTitle')}
                                                                     >
-                                                                        {t('player.edit')}
+                                                                        {t('common.edit')}
                                                                     </button>
                                                                     <button
                                                                         className="btn btn-sm btn-danger"

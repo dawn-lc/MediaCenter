@@ -117,7 +117,8 @@ export async function downloadMedia(req: Request, res: Response): Promise<void> 
                 filePath: schema.media.filePath,
                 mimeType: schema.media.mimeType,
                 minRole: schema.media.minRole,
-                fileName: schema.media.fileName
+                fileName: schema.media.fileName,
+                uploaderId: schema.media.uploaderId
             })
             .from(schema.media)
             .where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined))
@@ -131,8 +132,14 @@ export async function downloadMedia(req: Request, res: Response): Promise<void> 
             return;
         }
 
-        // 权限检查：resolveStreamUser 中间件已验证签名
-        if (!hasMinRole(req.user!.role ?? 'guest', mediaRecord.minRole ?? 'guest')) {
+        // 权限检查：与流媒体一致（含 owner 特例，上传者可下载自己的 owner 媒体）
+        const minRole = mediaRecord.minRole ?? 'guest';
+        if (minRole === 'owner') {
+            if (req.user!.role !== 'admin' && req.user!.id !== mediaRecord.uploaderId) {
+                res.status(403).json({ error: 'media.permissionDenied' });
+                return;
+            }
+        } else if (!hasMinRole(req.user!.role ?? 'guest', minRole)) {
             res.status(403).json({ error: 'media.permissionDenied' });
             return;
         }
@@ -179,7 +186,7 @@ export async function serveThumbnail(req: Request, res: Response): Promise<void>
         }
 
         const db = getDatabase();
-        const result = await db.select({ thumbPath: schema.media.thumbPath }).from(schema.media).where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined)).limit(1).execute();
+        const result = await db.select({ thumbPath: schema.media.thumbPath, minRole: schema.media.minRole, uploaderId: schema.media.uploaderId }).from(schema.media).where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined)).limit(1).execute();
 
         const mediaRecord = result[0];
 
@@ -188,8 +195,14 @@ export async function serveThumbnail(req: Request, res: Response): Promise<void>
             return;
         }
 
-        // 权限检查：resolveStreamUser 中间件已验证签名
-        if (!hasMinRole(req.user!.role ?? 'guest', 'guest')) {
+        // 权限检查：与流媒体一致，按媒体可见性 minRole 校验（含 owner 特例）
+        const minRole = mediaRecord.minRole ?? 'guest';
+        if (minRole === 'owner') {
+            if (req.user!.role !== 'admin' && req.user!.id !== mediaRecord.uploaderId) {
+                res.status(403).json({ error: 'media.permissionDenied' });
+                return;
+            }
+        } else if (!hasMinRole(req.user!.role ?? 'guest', minRole)) {
             res.status(403).json({ error: 'media.permissionDenied' });
             return;
         }

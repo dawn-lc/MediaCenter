@@ -75,7 +75,7 @@
 }
 
 .modal-close:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-card-hover);
     color: var(--text-primary);
 }
 
@@ -113,23 +113,50 @@
 }
 
 /* ========== 登录弹窗专用 ========== */
-.modal-auth-icon {
-    display: flex;
-    justify-content: center;
-    padding: 8px 24px 0;
+/* 记住登录复选框 */
+.form-group-checkbox {
+    margin-bottom: 16px;
 }
 
-.modal-auth-icon .auth-avatar {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
+/* 特异性需高于 .form-group label（0,1,1），否则 display:flex 会被覆盖为 block 导致复选框与文字不对齐 */
+.form-group label.auth-remember {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    color: #fff;
-    box-shadow: 0 8px 24px rgba(108, 92, 231, 0.3);
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 0;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.auth-remember input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    flex: none;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.auth-remember-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.auth-remember-title {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.auth-remember-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-muted);
 }
 
 .modal-auth-toggle {
@@ -141,17 +168,22 @@
 
 .auth-footer {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 10px;
     width: 100%;
 }
 
 .auth-footer .btn {
-    width: 100%;
+    flex: 1;
     justify-content: center;
     padding: 12px 20px;
     font-size: 15px;
     border-radius: var(--radius-sm);
+}
+
+/* 主操作按钮更宽，层次更清晰 */
+.auth-footer .btn-primary {
+    flex: 2;
 }
 
 .modal-auth-toggle a {

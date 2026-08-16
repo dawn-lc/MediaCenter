@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
-import { eq, and, count, isNull, like, or, sql } from 'drizzle-orm';
+import { eq, and, count, isNull, like, or, sql, desc, inArray, type SQL } from 'drizzle-orm';
 import { getDatabase, schema } from '../db/index';
 import { isString, isArray, isUndefined } from '../utils/env';
+import { invalidateSearchCache } from '../utils/searchCache';
 
 /**
  * 获取作者列表（支持分页和搜索）
@@ -14,6 +15,15 @@ export async function listAuthors(req: Request, res: Response): Promise<void> {
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
         const offset = (page - 1) * limit;
         const search = (req.query.search as string)?.trim();
+        // 排序：name | mediaCount（authors 表无 createdAt 列）
+        const sortBy = isString(req.query.sortBy) ? req.query.sortBy : 'name';
+        const sortOrder = isString(req.query.sortOrder) && req.query.sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
+        let orderBy: SQL;
+        if (sortBy === 'mediaCount') {
+            orderBy = sortOrder === 'asc' ? sql`count(${schema.media.id}) asc` : sql`count(${schema.media.id}) desc`;
+        } else {
+            orderBy = sortOrder === 'asc' ? schema.authors.name : desc(schema.authors.name);
+        }
 
         // 构建 WHERE 条件：搜索名称、别名或链接
         const where = search
@@ -44,7 +54,7 @@ export async function listAuthors(req: Request, res: Response): Promise<void> {
             .leftJoin(schema.media, and(eq(schema.media.authorId, schema.authors.id), isNull(schema.media.deletedAt)))
             .where(where)
             .groupBy(schema.authors.id, schema.authors.name, schema.authors.altNames, schema.authors.urls)
-            .orderBy(schema.authors.name)
+            .orderBy(orderBy)
             .limit(limit)
             .offset(offset)
             .execute();
@@ -60,6 +70,95 @@ export async function listAuthors(req: Request, res: Response): Promise<void> {
         });
     } catch (err) {
         console.error('[Authors] 获取列表失败:', err);
+        res.status(500).json({ error: 'error.internal' });
+    }
+}
+
+/**
+ * 获取作者公开主页信息
+ * GET /api/authors/:id
+ * 返回作者信息 + 按「当前用户可见范围」过滤的媒体统计
+ */
+export async function getAuthor(req: Request, res: Response): Promise<void> {
+    try {
+        const db = getDatabase();
+        const { id } = req.params;
+        if (!isString(id) || !id) {
+            res.status(400).json({ error: 'author.invalidId' });
+            return;
+        }
+
+        const [author] = await db
+            .select({
+                id: schema.authors.id,
+                name: schema.authors.name,
+                altNames: schema.authors.altNames,
+                urls: schema.authors.urls
+            })
+            .from(schema.authors)
+            .where(eq(schema.authors.id, id))
+            .limit(1)
+            .execute();
+
+        if (!author) {
+            res.status(404).json({ error: 'author.notFound' });
+            return;
+        }
+
+        // 媒体统计：authorId = id 且按当前用户可见性过滤（与 listMedia 一致）
+        const userRole = req.user?.role ?? 'guest';
+        const conditions = [eq(schema.media.authorId, id)];
+        if (userRole !== 'admin') {
+            if (req.user?.id) {
+                conditions.push(
+                    or(
+                        inArray(schema.media.minRole, ['guest', 'user']),
+                        and(eq(schema.media.minRole, 'owner'), eq(schema.media.uploaderId, req.user.id))
+                    )!
+                );
+            } else {
+                conditions.push(eq(schema.media.minRole, 'guest'));
+            }
+        }
+        const where = and(...conditions);
+
+        const [agg] = await db
+            .select({ total: count() })
+            .from(schema.media)
+            .where(where)
+            .execute();
+
+        const typeRows = await db
+            .select({ mimeType: schema.media.mimeType, c: count() })
+            .from(schema.media)
+            .where(where)
+            .groupBy(schema.media.mimeType)
+            .execute();
+        let video = 0;
+        let audio = 0;
+        let image = 0;
+        for (const r of typeRows) {
+            const m = (r.mimeType || '').toLowerCase();
+            const c = Number(r.c || 0);
+            if (m.startsWith('video/')) video += c;
+            else if (m.startsWith('audio/')) audio += c;
+            else if (m.startsWith('image/')) image += c;
+        }
+
+        res.json({
+            author: {
+                ...author,
+                mediaCount: Number(agg?.total || 0)
+            },
+            stats: {
+                total: Number(agg?.total || 0),
+                video,
+                audio,
+                image
+            }
+        });
+    } catch (err) {
+        console.error('[Authors] 获取作者失败:', err);
         res.status(500).json({ error: 'error.internal' });
     }
 }
@@ -176,6 +275,7 @@ export async function deleteAuthor(req: Request, res: Response): Promise<void> {
 
         await db.delete(schema.authors).where(eq(schema.authors.id, id)).execute();
 
+        invalidateSearchCache();
         res.json({ message: 'admin.authorDeleted' });
     } catch (err) {
         console.error('[Authors] 删除失败:', err);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { scanMediaFiles } from '../controllers/scanController';
-import { resetDatabase, deleteUser, toggleBan, listUsers, updateUserRole } from '../controllers/adminController';
+import { resetDatabase, deleteUser, toggleBan, listUsers, updateUserRole, createUser } from '../controllers/adminController';
 import { authenticate, requireAuth, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -10,6 +10,9 @@ router.use(authenticate, requireAuth, requireAdmin);
 
 // 获取用户列表
 router.get('/users', listUsers);
+
+// 管理员创建用户
+router.post('/users', createUser);
 
 // 更新用户角色
 router.put('/users/:id/role', updateUserRole);

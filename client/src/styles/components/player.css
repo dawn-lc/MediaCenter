@@ -102,6 +102,12 @@
     color: var(--primary);
 }
 
+/* 危险协议的 markdown 链接（javascript:/data: 等）渲染为纯文本，不可点击（XSS 防护） */
+.player-desc .markdown-plain-link {
+    color: var(--text-muted);
+    cursor: default;
+}
+
 /* 外部链接：显示小图标提示 */
 .player-desc a[target="_blank"]::after {
     content: " ↗";
@@ -281,8 +287,8 @@
     padding: 0 8px;
     height: 22px;
     border-radius: 4px;
-    background: rgba(255, 71, 87, 0.15);
-    color: #ff4757;
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    color: var(--danger);
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -429,7 +435,7 @@
 
 /* ========== 音频页 ========== */
 .audio-card {
-    background: linear-gradient(135deg, #1a1a3a, #0a0a1a);
+    background: var(--audio-card-bg);
     border-radius: var(--radius);
     padding: 40px;
     text-align: center;
@@ -476,6 +482,11 @@
     object-fit: contain;
     width: 100%;
     height: 100%;
+}
+
+/* 剩余时间显示在各端均无用，全局隐藏（默认可见，约 48px，还会挤压进度条） */
+.player-wrapper .video-js .vjs-remaining-time {
+    display: none;
 }
 
 /* 修复 Firefox 下进度条滑块的盒模型偏移 */

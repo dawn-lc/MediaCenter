@@ -1,8 +1,16 @@
-import type { AuthResponse, MediaListResponse, Media, UserListResponse, TagListResponse } from './types';
+import type { AuthResponse, MediaListResponse, Media, UserListResponse, TagListResponse, StatsResponse } from './types';
 import i18n from './i18n';
 import { STORAGE_PREFIX } from './config';
+import { ApiError } from './apiError';
 
 const AUTH_STORAGE_KEY = STORAGE_PREFIX + 'auth';
+
+/** 令牌失效事件（auth store 监听并重置登录态，避免重复弹提示） */
+export const SESSION_EXPIRED_EVENT = 'mediacenter:session-expired';
+/** 令牌静默续期成功事件（auth store 监听更新 access token，SSE 等依赖 token 的连接随之重建） */
+export const TOKEN_REFRESHED_EVENT = 'mediacenter:token-refreshed';
+/** refreshToken 持久化 key（记住登录） */
+export const AUTH_REFRESH_STORAGE_KEY = STORAGE_PREFIX + 'auth_refresh';
 
 /**
  * API 基础地址
@@ -31,16 +39,6 @@ export function resolveApiUrl(path: string | null | undefined): string {
     return new URL(API_HOST + path).href;
 }
 
-export class ApiError extends Error {
-    constructor(
-        message: string,
-        public status: number
-    ) {
-        super(message);
-        this.name = 'ApiError';
-    }
-}
-
 /** 从 localStorage 读取 token（和 auth store 使用相同 key） */
 function getToken(): string | null {
     try {
@@ -59,25 +57,80 @@ function getToken(): string | null {
     return null;
 }
 
-async function request<T>(method: string, path: string, body?: unknown, isFormData = false): Promise<T> {
+/** 正在进行的刷新请求（并发 401 只刷一次） */
+let refreshPromise: Promise<boolean> | null = null;
+
+/** 用 refreshToken 静默续期：成功后写入新令牌并通知 auth store，返回是否成功 */
+async function tryRefreshToken(): Promise<boolean> {
+    if (!refreshPromise) {
+        refreshPromise = doRefreshToken().finally(() => {
+            refreshPromise = null;
+        });
+    }
+    return refreshPromise;
+}
+
+async function doRefreshToken(): Promise<boolean> {
+    const refreshToken = localStorage.getItem(AUTH_REFRESH_STORAGE_KEY);
+    if (!refreshToken) return false;
+    try {
+        const res = await fetch(apiUrl('/auth/refresh'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (!data?.token || !data?.refreshToken) return false;
+        localStorage.setItem(AUTH_STORAGE_KEY, data.token);
+        localStorage.setItem(AUTH_REFRESH_STORAGE_KEY, data.refreshToken);
+        // 通知 auth store 更新内存 access token（SSE 等依赖 token 的连接随之重建）
+        window.dispatchEvent(new CustomEvent(TOKEN_REFRESHED_EVENT, { detail: { token: data.token } }));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function request<T>(method: string, path: string, body?: unknown, isFormData = false, retried = false): Promise<T> {
     const headers: Record<string, string> = {};
     if (!isFormData) headers['Content-Type'] = 'application/json';
 
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const fetchUrl = apiUrl(path);
-    const res = await fetch(fetchUrl, {
-        method,
-        headers,
-        body: body ? (isFormData ? (body as FormData) : JSON.stringify(body)) : undefined
-    });
+    let res: Response;
+    try {
+        res = await fetch(apiUrl(path), {
+            method,
+            headers,
+            body: body ? (isFormData ? (body as FormData) : JSON.stringify(body)) : undefined
+        });
+    } catch {
+        // 网络层错误（断网/超时等）：仅抛出，由全局错误处理器弹 toast
+        throw new ApiError(i18n.t('common.networkError'), 0);
+    }
 
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
         // 后端返回错误码（如 "auth.invalidCredentials"），前端 i18n 翻译
         const rawError = data?.error || `http.${res.status}`;
+        // 令牌失效：优先用 refreshToken 静默续期并重试原请求（仅重试一次）；
+        // 续期失败才重置登录态并提示会话过期（由 auth store 监听事件处理，此处不重复弹）
+        if (res.status === 401 && rawError === 'auth.tokenInvalid') {
+            if (!retried && (await tryRefreshToken())) {
+                return request<T>(method, path, body, isFormData, true);
+            }
+            try {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+                localStorage.removeItem(AUTH_REFRESH_STORAGE_KEY);
+            } catch {
+                /* ignore */
+            }
+            window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+            throw new ApiError(i18n.t('auth.sessionExpired'), 401, true);
+        }
         const displayError = rawError.includes('.') && i18n.exists(rawError) ? i18n.t(rawError) : rawError;
         throw new ApiError(displayError, res.status);
     }
@@ -106,8 +159,28 @@ export const Api = {
         });
     },
 
+    /** 登出：撤销该用户所有 refresh token（失败由调用方静默处理） */
+    logout() {
+        return request<{ message: string }>('POST', '/auth/logout');
+    },
+
     getProfile() {
         return request<{ user: import('./types').User }>('GET', '/auth/profile');
+    },
+
+    /** 公开用户主页信息（需登录）：用户信息 + 按当前用户可见范围的媒体统计 */
+    getUser(id: string) {
+        return request<{ user: import('./types').User; stats: import('./types').PublicUserStats }>('GET', `/users/${encodeURIComponent(id)}`);
+    },
+
+    /** 公开作者主页信息：作者信息 + 按当前用户可见范围的媒体统计 */
+    getAuthor(id: string) {
+        return request<{ author: import('./types').Author; stats: import('./types').PublicAuthorStats }>('GET', `/authors/${encodeURIComponent(id)}`);
+    },
+
+    /** 修改密码：验证旧密码，成功后撤销当前用户全部 refresh token */
+    changePassword(data: { oldPassword: string; newPassword: string }) {
+        return request<{ message: string }>('POST', '/auth/change-password', data);
     },
 
     // 媒体
@@ -119,6 +192,7 @@ export const Api = {
             search?: string;
             tags?: string;
             authorExpr?: string;
+            authorId?: string;
             uploaderId?: string;
             sortBy?: string;
             sortOrder?: string;
@@ -131,6 +205,7 @@ export const Api = {
         if (params.search) url.searchParams.set('search', params.search);
         if (params.tags) url.searchParams.set('tags', params.tags);
         if (params.authorExpr) url.searchParams.set('authorExpr', params.authorExpr);
+        if (params.authorId) url.searchParams.set('authorId', params.authorId);
         if (params.uploaderId) url.searchParams.set('uploaderId', params.uploaderId);
         if (params.sortBy) url.searchParams.set('sortBy', params.sortBy);
         if (params.sortOrder) url.searchParams.set('sortOrder', params.sortOrder);
@@ -139,6 +214,11 @@ export const Api = {
 
     getMedia(id: string) {
         return request<{ media: Media }>('GET', `/media/${id}`);
+    },
+
+    /** 首页概览统计（媒体总数/类型/总大小/标签/作者/最近上传） */
+    getStats() {
+        return request<StatsResponse>('GET', '/media/stats');
     },
 
     refreshStreamToken(id: string) {
@@ -185,11 +265,13 @@ export const Api = {
     },
 
     // 标签
-    listTags(params?: { page?: number; limit?: number; search?: string }) {
+    listTags(params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: string }) {
         const searchParams = new URLSearchParams();
         if (params?.page && params.page > 1) searchParams.set('page', String(params.page));
         if (params?.limit && params.limit !== 20) searchParams.set('limit', String(params.limit));
         if (params?.search) searchParams.set('search', params.search);
+        if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+        if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
         const qs = searchParams.toString();
         return request<TagListResponse>('GET', `/tags${qs ? '?' + qs : ''}`);
     },
@@ -211,17 +293,24 @@ export const Api = {
     },
 
     // 管理
-    listUsers(params?: { page?: number; limit?: number; search?: string }) {
+    listUsers(params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: string }) {
         const searchParams = new URLSearchParams();
         if (params?.page && params.page > 1) searchParams.set('page', String(params.page));
         if (params?.limit && params.limit !== 20) searchParams.set('limit', String(params.limit));
         if (params?.search) searchParams.set('search', params.search);
+        if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+        if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
         const qs = searchParams.toString();
         return request<UserListResponse>('GET', `/admin/users${qs ? '?' + qs : ''}`);
     },
 
     updateUserRole(userId: string, role: string) {
         return request<{ message: string }>('PUT', `/admin/users/${userId}/role`, { role });
+    },
+
+    /** 管理员创建用户（注册关闭时也可手动添加） */
+    createUser(data: { username: string; password: string; role?: string }) {
+        return request<{ message: string; user: import('./types').User }>('POST', '/admin/users', data);
     },
 
     deleteUser(userId: string) {
@@ -250,11 +339,13 @@ export const Api = {
     },
 
     // 作者
-    listAuthors(params?: { page?: number; limit?: number; search?: string }) {
+    listAuthors(params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: string }) {
         const searchParams = new URLSearchParams();
         if (params?.page && params.page > 1) searchParams.set('page', String(params.page));
         if (params?.limit && params.limit !== 20) searchParams.set('limit', String(params.limit));
         if (params?.search) searchParams.set('search', params.search);
+        if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+        if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
         const qs = searchParams.toString();
         return request<{ authors: import('./types').Author[]; pagination?: import('./types').Pagination }>('GET', `/authors${qs ? '?' + qs : ''}`);
     },

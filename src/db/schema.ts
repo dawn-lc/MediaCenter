@@ -36,7 +36,7 @@ export const media = pgTable(
         sourceMeta: text('source_meta'),
         source: text('source'),
         authorId: uuid('author_id').references(() => authors.id, { onDelete: 'set null' }),
-        uploaderId: uuid('uploader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+        uploaderId: uuid('uploader_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
         deletedAt: timestamp('deleted_at', { mode: 'string', withTimezone: true }),
         createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull().defaultNow()
@@ -64,7 +64,11 @@ export const refreshTokens = pgTable(
         expiresAt: timestamp('expires_at', { mode: 'string', withTimezone: true }).notNull(),
         createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull().defaultNow()
     },
-    (table) => [uniqueIndex('refresh_tokens_token_idx').on(table.token), index('refresh_tokens_user_idx').on(table.userId)]
+    (table) => [
+        uniqueIndex('refresh_tokens_token_idx').on(table.token),
+        index('refresh_tokens_user_idx').on(table.userId),
+        index('refresh_tokens_expires_idx').on(table.expiresAt)
+    ]
 );
 
 // ===== tags 表 =====

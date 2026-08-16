@@ -1,0 +1,58 @@
+/* ============================================
+   首页概览（Dashboard）
+   ============================================ */
+
+.dashboard .page-header {
+    margin-bottom: 24px;
+}
+
+.dashboard-login-hint {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+/* 统计卡片网格 */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    transition: var(--transition);
+}
+
+.stat-card:hover {
+    border-color: var(--primary-light);
+}
+
+.stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--primary-light);
+}
+
+.stat-value.stat-size {
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* 最近上传 */
+.dashboard-recent-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 16px;
+}

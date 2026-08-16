@@ -195,7 +195,23 @@ async function rangeFetch(
         });
         if (resp.status !== 206) return null;
         const buf = await resp.arrayBuffer();
-        // 验证返回数据大小符合预期，排除服务器返回 206 但响应体异常的 bug
+
+        // 服务器可能截断范围到文件末尾（小文件请求范围超出文件大小时）：
+        // Content-Range 形如 bytes 0-99999/100000，此时返回的是 start 到 EOF 的完整数据
+        const cr = resp.headers.get('Content-Range');
+        if (cr) {
+            const m = /^bytes\s+(\d+)-(\d+)\/(\d+)$/.exec(cr.trim());
+            if (m) {
+                const actualStart = parseInt(m[1], 10);
+                const actualEnd = parseInt(m[2], 10);
+                const total = parseInt(m[3], 10);
+                if (actualStart === start && actualEnd === total - 1 && buf.byteLength === actualEnd - actualStart + 1) {
+                    return buf; // 截断到 EOF 的完整剩余数据，接受
+                }
+            }
+        }
+
+        // 正常范围：验证返回数据大小符合预期，排除服务器返回 206 但响应体异常的 bug
         if (buf.byteLength < expected) return null;
         return buf;
     } catch {
@@ -468,14 +484,21 @@ export async function cacheThumbnail(mediaId: string, blob: Blob): Promise<void>
     }
 }
 
-/** 从缓存中获取缩略图，返回 SW 缓存路由 URL（由 SW 直接响应，无 blob 生命周期问题） */
+/** 从缓存中获取缩略图 URL：
+ * - SW 控制页面时返回 SW 路由 URL（/thumb?id=…，由 SW 直接响应，无 blob 生命周期问题）
+ * - SW 未控制时（DevTools 更新/绕过、首次访问、dev 环境）返回 object URL，
+ *   绕过 SW 直接从 Cache Storage 读 blob —— 后端 /thumb 路由是刻意 404，不能直连
+ */
 export async function getCachedThumbnailUrl(mediaId: string): Promise<string | null> {
     try {
         const cache = await caches.open(THUMB_CACHE);
         const response = await cache.match(cacheKey(mediaId));
         if (!response) return null;
-        // 返回 SW 路由 URL——SW 会从 Cache 直接响应，无需 blob
-        return cacheKey(mediaId);
+        if (navigator.serviceWorker?.controller) return cacheKey(mediaId);
+        // SW 未控制：直接读缓存 blob → object URL
+        const blob = await response.blob();
+        if (!blob || blob.size === 0 || blob.type === 'text/html') return null;
+        return URL.createObjectURL(blob);
     } catch {
         return null;
     }
@@ -493,13 +516,42 @@ export async function obtainThumbnailUrl(
     const cached = await getCachedThumbnailUrl(mediaId);
     if (cached) return cached;
 
-    // 2. 生成缩略图
-    const blob = await generateVideoThumbnail(videoUrl);
-    if (!blob) return null;
+    // 2. 受限并行：缓存未命中才占并发槽（下载/解码很重，全局限制避免打满带宽）
+    const release = await acquireThumbSlot();
+    try {
+        const blob = await generateVideoThumbnail(videoUrl);
+        if (!blob) return null;
 
-    // 3. 写入 SW 缓存
-    await cacheThumbnail(mediaId, blob);
+        // 3. 写入 SW 缓存
+        await cacheThumbnail(mediaId, blob);
 
-    // 4. 返回 SW 路由 URL——SW 从缓存响应，URL 永久有效
-    return cacheKey(mediaId);
+        // 4. 返回可用的 URL：SW 控制 → SW 路由 URL；否则 object URL（不依赖 SW）
+        return navigator.serviceWorker?.controller ? cacheKey(mediaId) : URL.createObjectURL(blob);
+    } finally {
+        release();
+    }
+}
+
+// ── 全局并发限制（受限并行） ──
+// 生成缩略图需要多个 Range 请求（头部 1MB + moov + 帧数据）并解码视频，
+// 若同时发起太多会打满带宽/拖慢服务器。串行过慢，这里限制为固定并发数。
+
+const MAX_THUMB_CONCURRENCY = 4;
+let activeThumbJobs = 0;
+const thumbJobQueue: (() => void)[] = [];
+
+function acquireThumbSlot(): Promise<() => void> {
+    if (activeThumbJobs < MAX_THUMB_CONCURRENCY) {
+        activeThumbJobs++;
+        return Promise.resolve(releaseThumbSlot);
+    }
+    return new Promise((resolve) => {
+        thumbJobQueue.push(() => resolve(releaseThumbSlot));
+    });
+}
+
+function releaseThumbSlot(): void {
+    activeThumbJobs--;
+    const next = thumbJobQueue.shift();
+    if (next) next();
 }

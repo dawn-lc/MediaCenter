@@ -84,6 +84,10 @@ export async function getQueryEmbedding(query: string): Promise<number[] | null>
     }
 }
 
+// 查询向量缓存: 同一查询文本的向量是确定性的, 翻页/重复搜索时避免重复调用外部嵌入 API
+const queryVecCache = new Map<string, number[][]>();
+const QUERY_VEC_CACHE_MAX = 200;
+
 /**
  * 生成多路查询向量(本地词典扩展, 供多路检索 RRF 融合):
  * [原文, ...其他语言别名] 各带指令前缀。如 中文查询"宵宫" → [宵宫, 宵宮, Yoimiya] 三路向量。
@@ -91,8 +95,13 @@ export async function getQueryEmbedding(query: string): Promise<number[] | null>
  */
 export async function getQueryEmbeddings(query: string): Promise<number[][] | null> {
     try {
+        const cached = queryVecCache.get(query);
+        if (cached) return cached;
         const variants = [query, ...matchDictAliases(query)];
-        return await embed(variants.map((v) => QUERY_INSTRUCTION + v));
+        const vecs = await embed(variants.map((v) => QUERY_INSTRUCTION + v));
+        if (queryVecCache.size >= QUERY_VEC_CACHE_MAX) queryVecCache.clear();
+        queryVecCache.set(query, vecs);
+        return vecs;
     } catch (e) {
         console.warn('[embedding] 多路查询向量生成失败, 回退 trgm:', e instanceof Error ? e.message : e);
         return null;
