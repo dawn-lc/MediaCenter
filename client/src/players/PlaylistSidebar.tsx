@@ -1,4 +1,5 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Media } from '../types';
 import { getMediaIcon, formatDuration } from '../utils';
@@ -11,6 +12,7 @@ interface Props {
 
 export default function PlaylistSidebar({ media }: Props) {
     const { t } = useTranslation();
+    const navigate = useNavigate();
 
     const queue = usePlaylistStore((s) => s.queue);
     const currentIndex = usePlaylistStore((s) => s.currentIndex);
@@ -191,8 +193,8 @@ export default function PlaylistSidebar({ media }: Props) {
 
     const clearPlaylist = useCallback(() => {
         clear();
-        window.location.href = '/';
-    }, [clear]);
+        navigate('/');
+    }, [clear, navigate]);
 
     const formatItemDuration = useCallback((item: Media) => {
         if (item.duration != null && item.duration > 0) return formatDuration(item.duration);

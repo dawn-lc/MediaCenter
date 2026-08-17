@@ -47,6 +47,10 @@ export const WHEEL_STEP = 3;
 // ── 播放器默认值 ──
 /** 竖屏视频最大高度占视口比例 */
 export const PORTRAIT_VIDEO_MAX_HEIGHT_RATIO = 0.85;
+/** 视频画面拖动调整进度：激活拖拽的最小水平位移（px） */
+export const VIDEO_DRAG_SEEK_THRESHOLD = 12;
+/** 视频画面双击判定间隔（ms）：两次点击间隔小于该值视为双击（越大双击越易触发） */
+export const VIDEO_DOUBLE_CLICK_MS = 400;
 /** 默认播放速度 */
 export const DEFAULT_PLAYBACK_RATE = 1;
 /** 默认音量 */

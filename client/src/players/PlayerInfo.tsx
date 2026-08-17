@@ -183,7 +183,7 @@ export default function PlayerInfo({ media, metaExtra }: PlayerInfoProps) {
                                     style={hue !== undefined ? { '--tag-hue': hue } as React.CSSProperties : undefined}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        navigate('/?tags=' + encodeURIComponent(t.name));
+                                        navigate('/library?tags=' + encodeURIComponent(t.name));
                                     }}
                                 >
                                     {t.name}

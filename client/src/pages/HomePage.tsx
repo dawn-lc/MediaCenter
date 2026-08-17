@@ -134,7 +134,10 @@ export default function HomePage() {
                         <div className="grid grid-2">
                             {recent.map((item) => (
                                 <MediaCard key={item.id} media={item}>
-                                    <TagList tags={item.tags || []} />
+                                    <TagList
+                                        tags={item.tags || []}
+                                        onTagClick={(name) => navigate('/library?tags=' + encodeURIComponent(name))}
+                                    />
                                 </MediaCard>
                             ))}
                         </div>

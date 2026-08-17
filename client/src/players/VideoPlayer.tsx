@@ -6,8 +6,31 @@ import { usePlaylistStore } from '../stores/playlist';
 import { usePlayerSettings } from '../stores/playerSettings';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { resolveApiUrl } from '../api';
-import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO } from '../config';
+import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO, VIDEO_DRAG_SEEK_THRESHOLD, VIDEO_DOUBLE_CLICK_MS } from '../config';
 import PlayerLayout from './PlayerLayout';
+
+/** 进度浮层时间格式化（浏览器原生 Intl，UTC 基准）：0 秒显示 0:00、分钟不补前导零；支持 >=24h 不进位 */
+const seekTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'UTC'
+});
+
+function formatSeekTime(seconds: number): string {
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    // Intl 只格式化不足一天的部分，避免 Date 对象对 >=24h 进位丢失真实小时数
+    const dayPart = total % 86400;
+    const str = seekTimeFormatter.format(new Date(dayPart * 1000)); // "HH:MM:SS"
+    if (hours === 0) {
+        // 不足 1 小时：去掉 0 小时段 + 分钟不补前导零 → 0:00 / 5:00
+        return str.slice(3).replace(/^0/, '');
+    }
+    // >=1 小时：真实小时 + Intl 的 MM:SS（分钟/秒保留补零），小时不补前导零 → 1:00:00 / 25:00:00
+    return `${hours}:${str.slice(3)}`;
+}
 
 interface Props {
     media: Media;
@@ -26,6 +49,8 @@ export default function VideoPlayer({ media }: Props) {
     const { streamUrl } = useStreamToken(media.id, media.streamUrl);
     // 竖屏视频限制宽度（px），null 表示不限制
     const [portraitMaxWidth, setPortraitMaxWidth] = useState<number | null>(null);
+    // 视频画面拖动进度浮层（拖动 seek 时显示目标时间）
+    const [seekOverlay, setSeekOverlay] = useState<{ current: number; duration: number } | null>(null);
 
     useEffect(() => {
         if (!videoRef.current) return;
@@ -40,6 +65,8 @@ export default function VideoPlayer({ media }: Props) {
                 preload: 'auto',
                 fluid: true,
                 playbackRates: [0.5, 1, 1.5, 2],
+                // 桌面端保留 video.js 默认点击行为（单击 toggle 播放/暂停、双击全屏）
+                // 移动端点击由下方 tap 双击判定接管（video.js 触摸端不产生原生 click/dblclick）
                 userActions: { hotkeys: true }
             });
             playerRef.current = player;
@@ -211,11 +238,126 @@ export default function VideoPlayer({ media }: Props) {
         return () => window.removeEventListener('keydown', handler);
     }, []);
 
+    // 视频画面手势：点按后横向滑动，跟随手指位移调整播放进度（类似主流移动端播放器）
+    useEffect(() => {
+        const videoEl = videoRef.current;
+        if (!videoEl) return;
+
+        interface DragState {
+            pointerId: number;
+            startX: number;
+            startTime: number;
+            lastTime: number;
+            active: boolean;
+            wasPlaying: boolean;
+        }
+        let dragState: DragState | null = null;
+        // 移动端双击判定（基于 pointerup，比 video.js tap 更即时；桌面端不参与，保留 video.js 默认）
+        let lastTap = 0;
+        let tapTimer: number | null = null;
+
+        const onPointerDown = (e: PointerEvent) => {
+            const target = e.target as HTMLElement | null;
+            // 仅响应视频画面（排除控制栏/大播放按钮等 video.js 覆盖层）
+            if (target && target.closest?.('.vjs-control-bar, .vjs-big-play-button')) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            const cur = videoEl.currentTime || 0;
+            dragState = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startTime: cur,
+                lastTime: cur,
+                active: false,
+                wasPlaying: !videoEl.paused
+            };
+            try { videoEl.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        };
+
+        const onPointerMove = (e: PointerEvent) => {
+            if (!dragState || e.pointerId !== dragState.pointerId) return;
+            const dur = videoEl.duration;
+            if (!isFinite(dur) || dur <= 0) return;
+            const dx = e.clientX - dragState.startX;
+            if (!dragState.active) {
+                if (Math.abs(dx) < VIDEO_DRAG_SEEK_THRESHOLD) return;
+                dragState.active = true;
+                // 拖动期间暂停定格，便于精确拖动；松手后按原状态恢复
+                if (dragState.wasPlaying) videoEl.pause();
+            }
+            const width = videoEl.clientWidth || 1;
+            const newTime = Math.min(Math.max(dragState.startTime + (dx / width) * dur, 0), dur);
+            dragState.lastTime = newTime;
+            setSeekOverlay({ current: newTime, duration: dur });
+        };
+
+        const onPointerUp = (e: PointerEvent) => {
+            if (!dragState || e.pointerId !== dragState.pointerId) return;
+            const { active, lastTime, wasPlaying } = dragState;
+            dragState = null;
+            try { videoEl.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+
+            if (active) {
+                // 拖拽 seek 结束
+                videoEl.currentTime = lastTime;
+                setSeekOverlay(null);
+                if (wasPlaying) videoEl.play().catch(() => { });
+                return;
+            }
+
+            // 轻点：桌面端（mouse）交给 video.js 默认（单击 toggle / 双击全屏），不干预；
+            // 移动端触摸（touch）用 pointerup 即时判定双击 → 切换播放/暂停
+            if (e.pointerType === 'mouse') return;
+
+            const now = Date.now();
+            if (now - lastTap < VIDEO_DOUBLE_CLICK_MS) {
+                // 第二次轻点 → 双击：立即切换播放/暂停
+                lastTap = 0;
+                if (tapTimer !== null) { window.clearTimeout(tapTimer); tapTimer = null; }
+                if (videoEl.paused) videoEl.play().catch(() => { });
+                else videoEl.pause();
+            } else {
+                // 第一次轻点：等待可能的第二次轻点（双击），期间不切换
+                lastTap = now;
+                if (tapTimer !== null) window.clearTimeout(tapTimer);
+                tapTimer = window.setTimeout(() => { tapTimer = null; lastTap = 0; }, VIDEO_DOUBLE_CLICK_MS);
+            }
+        };
+
+        const onPointerCancel = (e: PointerEvent) => {
+            if (dragState && e.pointerId === dragState.pointerId) {
+                dragState = null;
+                setSeekOverlay(null);
+            }
+        };
+
+        // pointer 手势：拖拽 seek + 移动端双击判定
+        // （桌面端单击/双击保留 video.js 默认；video.js 无画布拖拽 seek 能力，必须自定义）
+        videoEl.addEventListener('pointerdown', onPointerDown);
+        videoEl.addEventListener('pointermove', onPointerMove);
+        videoEl.addEventListener('pointerup', onPointerUp);
+        videoEl.addEventListener('pointercancel', onPointerCancel);
+        return () => {
+            videoEl.removeEventListener('pointerdown', onPointerDown);
+            videoEl.removeEventListener('pointermove', onPointerMove);
+            videoEl.removeEventListener('pointerup', onPointerUp);
+            videoEl.removeEventListener('pointercancel', onPointerCancel);
+        };
+    }, [media.id]);
+
     return (
         <PlayerLayout media={media} mediaWrapperStyle={portraitMaxWidth ? { maxWidth: portraitMaxWidth } : undefined}>
-            <video ref={videoRef} className="video-js vjs-default-skin vjs-big-play-centered" controls autoPlay={autoPlayVideo} preload="auto">
-                <source src={streamUrl} type={media.mimeType} />
-            </video>
+            <div className="video-gesture-wrap">
+                <video ref={videoRef} className="video-js vjs-default-skin vjs-big-play-centered" controls autoPlay={autoPlayVideo} preload="auto">
+                    <source src={streamUrl} type={media.mimeType} />
+                </video>
+                {seekOverlay && (
+                    <div className="video-seek-overlay">
+                        <span>{formatSeekTime(seekOverlay.current)}</span>
+                        <span className="seek-divider">/</span>
+                        <span>{formatSeekTime(seekOverlay.duration)}</span>
+                    </div>
+                )}
+            </div>
         </PlayerLayout>
     );
 }

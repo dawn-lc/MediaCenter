@@ -16,6 +16,48 @@ export default function ThemeToggle() {
     const setPref = useThemeStore((s) => s.setPref);
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
+    // 移动端播放页：底部固定悬浮控制栏的高度（undefined 表示不避让，用 CSS 默认 bottom）
+    const [fabBottom, setFabBottom] = useState<number | undefined>(undefined);
+
+    // 自动布局：测量播放页底部固定控制栏（.player-controls）实际高度，FAB 精确避让
+    // （替代 CSS 硬编码 120px；控制栏高度随内容换行/安全区动态变化）
+    useEffect(() => {
+        let raf = 0;
+        const update = () => {
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const controls = document.querySelector<HTMLElement>('.player-controls');
+            // 仅当移动端且控制栏为固定底栏时才避让；其余场景用 CSS 默认 bottom: 20px
+            if (!isMobile || !controls || getComputedStyle(controls).position !== 'fixed') {
+                setFabBottom(undefined);
+                return;
+            }
+            setFabBottom(Math.round(controls.getBoundingClientRect().height) + 12);
+        };
+        const schedule = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(update);
+        };
+
+        // 视口断点变化（进出移动端）
+        const mq = window.matchMedia('(max-width: 768px)');
+        mq.addEventListener?.('change', schedule);
+        // 控制栏高度变化（窗口 resize、内容换行、安全区）
+        const ro = new ResizeObserver(schedule);
+        // 播放页懒加载，控制栏出现/消失时重新测量
+        const mo = new MutationObserver(schedule);
+        mo.observe(document.body, { childList: true, subtree: true });
+
+        const controls = document.querySelector<HTMLElement>('.player-controls');
+        if (controls) ro.observe(controls);
+
+        schedule();
+        return () => {
+            cancelAnimationFrame(raf);
+            mq.removeEventListener?.('change', schedule);
+            ro.disconnect();
+            mo.disconnect();
+        };
+    }, []);
 
     // 打开时：点击外部 / Esc 关闭
     useEffect(() => {
@@ -38,7 +80,11 @@ export default function ThemeToggle() {
     const fabIcon = effective === 'light' ? <SunIcon size={24} /> : <MoonIcon size={24} />;
 
     return (
-        <div className="theme-toggle" ref={ref}>
+        <div
+            className="theme-toggle"
+            ref={ref}
+            style={fabBottom !== undefined ? { bottom: fabBottom } : undefined}
+        >
             <div
                 className={`theme-menu${open ? ' open' : ''}`}
                 role="menu"

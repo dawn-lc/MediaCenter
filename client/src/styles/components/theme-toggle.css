@@ -6,7 +6,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    z-index: 800;
+    z-index: var(--z-fab);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -133,3 +133,6 @@ html[data-theme='light'] .theme-fab {
 body:has(:fullscreen) .theme-toggle {
     display: none;
 }
+
+/* 移动端播放页避让底部固定悬浮控制栏：由 ThemeToggle 组件用 JS 动态测量
+   .player-controls 实际高度并写入内联 bottom，此处不再硬编码高度 */

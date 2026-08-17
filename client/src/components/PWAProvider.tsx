@@ -75,7 +75,7 @@ export default function PWAProvider({ children }: PWAProviderProps) {
                     top: 0,
                     left: 0,
                     right: 0,
-                    zIndex: 9999,
+                    zIndex: 'var(--z-banner)',
                     background: 'var(--danger)',
                     color: '#fff',
                     textAlign: 'center',

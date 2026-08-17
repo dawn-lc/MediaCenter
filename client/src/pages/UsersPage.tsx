@@ -12,6 +12,7 @@ import Modal from '../components/Modal';
 import LoadingState from '../components/LoadingState';
 import Pagination from '../components/Pagination';
 import { showConfirm } from '../components/ConfirmDialog';
+import { useAdminTableState } from '../hooks/useAdminTableState';
 
 export default function UsersPage() {
     const { t } = useTranslation();
@@ -19,11 +20,13 @@ export default function UsersPage() {
     const currentUser = useAuthStore((s) => s.user);
     const [users, setUsers] = useState<User[]>([]);
     const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState('createdAt');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // 分页/搜索/排序状态同步到 URL（?search=&sort=&page=），跳转后返回/刷新时恢复
+    const { page, search: searchQuery, sortBy, sortOrder, setSearch, setSort, setPage } = useAdminTableState({
+        defaultSortBy: 'createdAt',
+        defaultSortOrder: 'desc',
+        newColumnDescKeys: []
+    });
     // 创建用户弹窗
     const [showCreate, setShowCreate] = useState(false);
     const [newUsername, setNewUsername] = useState('');
@@ -53,19 +56,12 @@ export default function UsersPage() {
     }, [data]);
 
     const handleSearchChange = (val: string) => {
-        setSearchQuery(val);
-        setPage(1);
+        setSearch(val);
     };
 
-    // 表头排序：同列切换方向，新列默认升序（时间列默认倒序）
+    // 表头排序：同列切换方向，新列默认升序，自动重置到第一页
     const handleSort = (key: string) => {
-        if (sortBy === key) {
-            setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortBy(key);
-            setSortOrder(key === 'createdAt' ? 'desc' : 'asc');
-        }
-        setPage(1);
+        setSort(key);
     };
 
     const changeRole = async (userId: string, role: string) => {

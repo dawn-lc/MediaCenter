@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Api } from '../api';
 import type { Media } from '../types';
 import { usePlaylistStore } from '../stores/playlist';
@@ -13,7 +12,6 @@ interface Props {
 }
 
 export default function AudioPlayer({ media }: Props) {
-    const navigate = useNavigate();
     const playlist = usePlaylistStore();
     const audioRef = useRef<HTMLAudioElement>(null);
     const { streamUrl, refresh } = useStreamToken(media.id, media.streamUrl);
@@ -92,15 +90,13 @@ export default function AudioPlayer({ media }: Props) {
             const nextIdx = usePlaylistStore.getState().getNextIndex();
             if (nextIdx >= 0) {
                 const item = usePlaylistStore.getState().queue[nextIdx];
-                usePlaylistStore.setState({ currentIndex: nextIdx });
-                if (item) {
-                    if (item.id === media.id) {
-                        // 单曲循环（repeatOne）：直接重播，无需重新串流
-                        audio.currentTime = 0;
-                        audio.play();
-                    } else {
-                        navigate('/view/' + item.id);
-                    }
+                if (item && item.id === media.id) {
+                    // 单曲循环（repeatOne）：直接重播，无需重新串流
+                    audio.currentTime = 0;
+                    audio.play();
+                } else if (item) {
+                    // 切换到下一项，PlayerPage 会监听 currentIndex 变化自动加载
+                    usePlaylistStore.setState({ currentIndex: nextIdx });
                 }
             }
         };

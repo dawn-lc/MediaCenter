@@ -12,7 +12,7 @@
     justify-content: space-between;
     position: sticky;
     top: 0;
-    z-index: 100;
+    z-index: var(--z-navbar);
     backdrop-filter: blur(12px);
 }
 
@@ -132,7 +132,7 @@
     box-shadow: var(--shadow);
     min-width: 160px;
     padding: 6px;
-    z-index: 300;
+    z-index: var(--z-dropdown);
     opacity: 0;
     transform: translateY(-4px);
     pointer-events: none;
@@ -223,7 +223,7 @@
     border-radius: var(--radius-sm);
     transition: var(--transition);
     position: relative;
-    z-index: 101;
+    z-index: var(--z-navbar-toggle);
 }
 
 .navbar-toggle span {

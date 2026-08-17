@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { Media } from '../types';
 import { formatDuration } from '../utils';
 import { usePlaylistStore } from '../stores/playlist';
@@ -13,7 +12,6 @@ interface Props {
 }
 
 export default function ImageViewer({ media }: Props) {
-    const navigate = useNavigate();
     const playlist = usePlaylistStore();
     const [countdown, setCountdown] = useState(0);
 
@@ -32,8 +30,10 @@ export default function ImageViewer({ media }: Props) {
                     const nextIdx = usePlaylistStore.getState().getNextIndex();
                     if (nextIdx >= 0) {
                         const item = usePlaylistStore.getState().queue[nextIdx];
-                        usePlaylistStore.setState({ currentIndex: nextIdx });
-                        if (item) navigate('/view/' + item.id);
+                        if (item) {
+                            // 切换到下一项，PlayerPage 会监听 currentIndex 变化自动加载
+                            usePlaylistStore.setState({ currentIndex: nextIdx });
+                        }
                     }
                     return 0;
                 }

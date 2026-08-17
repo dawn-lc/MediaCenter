@@ -48,48 +48,4 @@
 }
 
 /* ========== Toast ========== */
-.toast {
-    position: fixed;
-    top: 80px;
-    right: 24px;
-    z-index: 1000;
-    padding: 14px 20px;
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    font-weight: 500;
-    box-shadow: var(--shadow);
-    transform: translateX(120%);
-    transition: transform 0.3s ease;
-    max-width: 360px;
-}
-
-.toast.show {
-    transform: translateX(0);
-}
-
-.toast-success {
-    background: var(--success);
-    color: #000;
-}
-
-.toast-error {
-    background: var(--danger);
-    color: #fff;
-}
-
-.toast-info {
-    background: var(--primary);
-    color: #fff;
-}
-
-/* 浅色主题下 --success 变深绿，黑色文字对比不足 → 白字 */
-@media (prefers-color-scheme: light) {
-    .toast-success {
-        color: #fff;
-    }
-}
-
-/* 手动浅色（data-theme）同样生效 */
-html[data-theme='light'] .toast-success {
-    color: #fff;
-}
+/* 提示统一走 sonner（App.tsx <Toaster>），旧 .toast* 样式已废弃删除 */

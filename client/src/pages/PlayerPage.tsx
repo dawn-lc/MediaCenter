@@ -43,6 +43,12 @@ export default function PlayerPage() {
             .then((data) => {
                 setMedia(data.media);
                 setMediaType(getMediaType(data.media.mimeType));
+                // 单曲播放：若当前媒体不在播放列表，设为单曲队列
+                // （否则 queue 为空时 getNextIndex 恒为 -1，循环/单曲循环等模式无法重播当前视频）
+                const st = usePlaylistStore.getState();
+                if (!st.queue.some((m) => m.id === id)) {
+                    usePlaylistStore.setState({ queue: [data.media], currentIndex: 0 });
+                }
             })
             .catch((err: Error) => {
                 // 403 由页面状态呈现；其余错误统一弹 toast（会话过期自动静默）

@@ -4,7 +4,12 @@ import { DEBOUNCE_MS, STORAGE_PREFIX } from '../config';
 
 const STORAGE_KEY = STORAGE_PREFIX + 'playlist';
 
-export type PlayMode = 'list' | 'loop' | 'shuffle' | 'repeatOne' | 'manual';
+/** 旧版单一切换模式（兼容 localStorage 迁移用） */
+type LegacyPlayMode = 'list' | 'loop' | 'shuffle' | 'repeatOne' | 'manual';
+/** 循环控制（与播放列表推进方式独立） */
+export type LoopMode = 'off' | 'repeatOne' | 'repeatAll';
+/** 播放列表推进方式（与循环控制独立） */
+export type PlayOrder = 'sequential' | 'shuffle' | 'manual';
 
 // 不限制播单最大条数（由虚拟滚动保证渲染性能）
 
@@ -33,25 +38,52 @@ function scheduleSave() {
 
 function doSave() {
     try {
-        const { queue, currentIndex, playMode } = usePlaylistStore.getState();
+        const { queue, currentIndex, loopMode, playOrder } = usePlaylistStore.getState();
         const lightQueue = queue.map(sanitizeForStorage);
         localStorage.setItem(
             STORAGE_KEY,
-            JSON.stringify({ queue: lightQueue, index: currentIndex, playMode })
+            JSON.stringify({ queue: lightQueue, index: currentIndex, loopMode, playOrder })
         );
     } catch {
         /* */
     }
 }
 
-function load(): {
+interface SavedPlaylist {
     queue: Media[];
     index: number;
-    playMode: PlayMode;
-} | null {
+    loopMode: LoopMode;
+    playOrder: PlayOrder;
+}
+
+/** 旧版单一 playMode → 新双配置的迁移映射 */
+const LEGACY_MODE_MAP: Record<LegacyPlayMode, Pick<SavedPlaylist, 'loopMode' | 'playOrder'>> = {
+    list: { loopMode: 'off', playOrder: 'sequential' },
+    loop: { loopMode: 'repeatAll', playOrder: 'sequential' },
+    shuffle: { loopMode: 'off', playOrder: 'shuffle' },
+    repeatOne: { loopMode: 'repeatOne', playOrder: 'sequential' },
+    manual: { loopMode: 'off', playOrder: 'manual' }
+};
+
+function load(): SavedPlaylist | null {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // 兼容旧版本：单一 playMode 字段迁移到独立的 loopMode + playOrder
+        if (typeof parsed.playMode === 'string' && parsed.playMode in LEGACY_MODE_MAP) {
+            return {
+                queue: parsed.queue ?? [],
+                index: parsed.index ?? -1,
+                ...LEGACY_MODE_MAP[parsed.playMode as LegacyPlayMode]
+            };
+        }
+        return {
+            queue: parsed.queue ?? [],
+            index: parsed.index ?? -1,
+            loopMode: parsed.loopMode ?? 'off',
+            playOrder: parsed.playOrder ?? 'sequential'
+        };
     } catch {
         return null;
     }
@@ -62,7 +94,8 @@ const saved = load();
 interface PlaylistState {
     queue: Media[];
     currentIndex: number;
-    playMode: PlayMode;
+    loopMode: LoopMode;
+    playOrder: PlayOrder;
     total: number;
     position: number;
     hasNext: boolean;
@@ -72,14 +105,16 @@ interface PlaylistState {
     append(list: Media[]): void;
     removeById(id: string): string | null;
     clear(): void;
-    setPlayMode(mode: PlayMode): void;
+    setLoopMode(mode: LoopMode): void;
+    setPlayOrder(order: PlayOrder): void;
     getNextIndex(): number;
 }
 
 export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     queue: saved?.queue ?? [],
     currentIndex: saved?.index ?? -1,
-    playMode: saved?.playMode ?? 'list',
+    loopMode: saved?.loopMode ?? 'off',
+    playOrder: saved?.playOrder ?? 'sequential',
 
     get current() {
         const { queue, currentIndex } = get();
@@ -93,9 +128,12 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         return i >= 0 ? i + 1 : 0;
     },
     get hasNext() {
-        const { queue, currentIndex, playMode } = get();
+        const { queue, currentIndex, loopMode, playOrder } = get();
         if (queue.length === 0) return false;
-        if (playMode === 'loop' || playMode === 'repeatOne' || playMode === 'shuffle' || playMode === 'manual') return true;
+        if (playOrder === 'manual') return true;              // 手动：可手动切歌
+        if (loopMode === 'repeatOne') return true;            // 单曲循环
+        if (playOrder === 'shuffle') return queue.length > 1 || loopMode === 'repeatAll';
+        if (loopMode === 'repeatAll') return true;            // 列表循环
         return currentIndex < queue.length - 1;
     },
     get hasPrev() {
@@ -134,29 +172,36 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         doSave(); // 同步保存，避免 navigate 页面卸载后 debounce 未触发
     },
 
-    setPlayMode: (mode) => {
-        set({ playMode: mode });
+    setLoopMode: (mode) => {
+        set({ loopMode: mode });
+        scheduleSave();
+    },
+
+    setPlayOrder: (order) => {
+        set({ playOrder: order });
         scheduleSave();
     },
 
     getNextIndex: () => {
-        const { queue, currentIndex, playMode } = get();
+        const { queue, currentIndex, loopMode, playOrder } = get();
         if (queue.length === 0) return -1;
-        if (playMode === 'manual') return -1;
-        if (playMode === 'repeatOne') return currentIndex;
-        if (playMode === 'shuffle') {
-            if (queue.length === 1) return currentIndex;
+        // 手动：不自动推进（循环控制也不生效）
+        if (playOrder === 'manual') return -1;
+        // 单曲循环：始终重播当前
+        if (loopMode === 'repeatOne') return currentIndex;
+        // 随机推进
+        if (playOrder === 'shuffle') {
+            if (queue.length === 1) {
+                return loopMode === 'repeatAll' ? currentIndex : -1;
+            }
             let next: number;
             do {
                 next = Math.floor(Math.random() * queue.length);
             } while (next === currentIndex);
             return next;
         }
-        if (playMode === 'loop') {
-            return (currentIndex + 1) % queue.length;
-        }
-        // list 模式
+        // 顺序推进
         if (currentIndex < queue.length - 1) return currentIndex + 1;
-        return -1;
+        return loopMode === 'repeatAll' ? 0 : -1;
     }
 }));

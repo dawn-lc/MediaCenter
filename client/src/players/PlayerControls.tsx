@@ -1,10 +1,11 @@
 ﻿import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePlaylistStore } from '../stores/playlist';
 import { usePlayerSettings } from '../stores/playerSettings';
 import { useAuthStore } from '../stores/auth';
 import { Api } from '../api';
-import type { PlayMode } from '../stores/playlist';
+import type { LoopMode, PlayOrder } from '../stores/playlist';
 import type { Media } from '../types';
 import { getMediaType } from '../utils';
 import { notify } from '../utils/notify';
@@ -17,6 +18,7 @@ interface Props {
 
 export default function PlayerControls({ media, countdown = 0 }: Props) {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const playlist = usePlaylistStore();
     const playerSettings = usePlayerSettings();
     const { queue } = playlist;
@@ -28,8 +30,8 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
         const state = usePlaylistStore.getState();
         if (state.queue.length <= 1) return;
         let prevIdx = state.currentIndex - 1;
-        // loop/shuffle 模式在首项时回绕到末项
-        if (prevIdx < 0 && (state.playMode === 'loop' || state.playMode === 'shuffle')) {
+        // 列表循环/随机/手动模式在首项时回绕到末项
+        if (prevIdx < 0 && (state.loopMode === 'repeatAll' || state.playOrder === 'shuffle' || state.playOrder === 'manual')) {
             prevIdx = state.queue.length - 1;
         }
         if (prevIdx >= 0) {
@@ -40,26 +42,41 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const goNext = () => {
         const state = usePlaylistStore.getState();
         if (state.queue.length <= 1) return;
-        // 从播放模式获取下一个索引
-        let nextIdx = state.getNextIndex();
-        // repeatOne：不重复自身，改为线性下一项
-        if (nextIdx === state.currentIndex && state.playMode === 'repeatOne') {
-            nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
-        }
-        // 播放模式无下一项时，回退到线性下一项（如 manual 模式）
-        if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
-            nextIdx = state.currentIndex + 1;
+        let nextIdx: number;
+        // 手动模式：始终环形推进到下一项（播放完仍不自动推进，由 ended 逻辑保持）
+        if (state.playOrder === 'manual') {
+            nextIdx = (state.currentIndex + 1) % state.queue.length;
+        } else {
+            // 从播放模式获取下一个索引
+            nextIdx = state.getNextIndex();
+            // 单曲循环：手动切歌不重复自身，改为线性下一项
+            if (nextIdx === state.currentIndex && state.loopMode === 'repeatOne') {
+                nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
+            }
+            // 播放模式无下一项时，回退到线性下一项
+            if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
+                nextIdx = state.currentIndex + 1;
+            }
         }
         if (nextIdx >= 0) {
             usePlaylistStore.setState({ currentIndex: nextIdx });
         }
     };
 
-    const cycleMode = () => {
-        const { playMode } = usePlaylistStore.getState();
-        const modes: PlayMode[] = ['list', 'loop', 'shuffle', 'repeatOne', 'manual'];
-        const next = modes[(modes.indexOf(playMode) + 1) % modes.length];
-        playlist.setPlayMode(next);
+    // 循环控制：不循环 → 单曲循环 → 列表循环（独立于播放列表推进方式）
+    const cycleLoop = () => {
+        const { loopMode } = usePlaylistStore.getState();
+        const modes: LoopMode[] = ['off', 'repeatOne', 'repeatAll'];
+        const next = modes[(modes.indexOf(loopMode) + 1) % modes.length];
+        playlist.setLoopMode(next);
+    };
+
+    // 播放列表推进：顺序 → 随机 → 手动（独立于循环控制）
+    const cycleOrder = () => {
+        const { playOrder } = usePlaylistStore.getState();
+        const orders: PlayOrder[] = ['sequential', 'shuffle', 'manual'];
+        const next = orders[(orders.indexOf(playOrder) + 1) % orders.length];
+        playlist.setPlayOrder(next);
     };
 
     const openDurationEdit = () => {
@@ -81,19 +98,25 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     // 实时计算 hasNext/hasPrev，绕过 Zustand getter 固化问题
     const state = usePlaylistStore.getState();
     const settings = usePlayerSettings.getState();
-    const playMode = state.playMode;
+    const loopMode = state.loopMode;
+    const playOrder = state.playOrder;
     // 仅一个项目时锁定前后切换
     const multi = state.queue.length > 1;
-    // loop/shuffle 模式在首项时可回绕到末项
-    const hasPrev = multi && (state.currentIndex > 0 || (state.currentIndex === 0 && (playMode === 'loop' || playMode === 'shuffle') && state.queue.length > 0));
+    // 列表循环/随机/手动模式在首项时可回绕到末项
+    const hasPrev = multi && (state.currentIndex > 0 || (state.currentIndex === 0 && (loopMode === 'repeatAll' || playOrder === 'shuffle' || playOrder === 'manual') && state.queue.length > 0));
     // 根据播放模式判断是否有下一项
     let nextIdx = multi ? state.getNextIndex() : -1;
-    if (nextIdx === state.currentIndex && playMode === 'repeatOne') {
-        nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
-    }
-    // 播放模式无下一项但队列中还有后续项时仍可手动导航（如 manual 模式）
-    if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
-        nextIdx = state.currentIndex + 1;
+    if (playOrder === 'manual') {
+        // 手动模式：始终可环形推进到下一项
+        nextIdx = multi ? (state.currentIndex + 1) % state.queue.length : -1;
+    } else {
+        if (nextIdx === state.currentIndex && loopMode === 'repeatOne') {
+            nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
+        }
+        // 播放模式无下一项但队列中还有后续项时仍可手动导航
+        if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
+            nextIdx = state.currentIndex + 1;
+        }
     }
     const hasNext = multi && nextIdx >= 0;
 
@@ -114,7 +137,7 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                 case 'l':
                 case 'L':
                     e.preventDefault();
-                    cycleMode();
+                    cycleLoop();
                     break;
                 case 'Delete':
                     if (useAuthStore.getState().isAdmin) {
@@ -126,7 +149,7 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                                 const removed = usePlaylistStore.getState().removeById(media.id);
                                 // removeById 已自动将 currentIndex 更新到下一项，无需再 goNext
                                 if (removed === null) {
-                                    window.location.href = '/';
+                                    navigate('/');
                                 }
                             }
                         });
@@ -161,8 +184,11 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                     )}
                 </div>
                 <div className="player-controls-right">
-                    <button className="btn btn-secondary btn-sm" onClick={cycleMode}>
-                        {t(`view.mode${playMode.charAt(0).toUpperCase()}${playMode.slice(1)}`)}
+                    <button className="btn btn-secondary btn-sm" onClick={cycleOrder} title={t('view.orderLabel')}>
+                        {t(`view.order${playOrder.charAt(0).toUpperCase()}${playOrder.slice(1)}`)}
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={cycleLoop} title={t('view.loopLabel')}>
+                        {t(`view.loop${loopMode.charAt(0).toUpperCase()}${loopMode.slice(1)}`)}
                     </button>
                 </div>
             </div>

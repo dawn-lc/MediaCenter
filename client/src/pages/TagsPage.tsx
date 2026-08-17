@@ -10,6 +10,7 @@ import LoadingState from '../components/LoadingState';
 import Pagination from '../components/Pagination';
 import { showConfirm } from '../components/ConfirmDialog';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { useAdminTableState } from '../hooks/useAdminTableState';
 import { ADMIN_PAGE_SIZE } from '../config';
 
 /** 行内编辑中的行状态 */
@@ -23,12 +24,14 @@ export default function TagsPage() {
     const { t } = useTranslation();
     const [tags, setTags] = useState<Tag[]>([]);
     const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [newTagName, setNewTagName] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState('name');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    // 分页/搜索/排序状态同步到 URL（?search=&sort=&page=），跳转后返回/刷新时恢复
+    const { page, search: searchQuery, sortBy, sortOrder, setSearch, setSort, setPage } = useAdminTableState({
+        defaultSortBy: 'name',
+        defaultSortOrder: 'asc',
+        newColumnDescKeys: ['mediaCount']
+    });
     const [editing, setEditing] = useState<EditingRow | null>(null);
     const editRef = useRef<HTMLDivElement>(null);
 
@@ -60,19 +63,12 @@ export default function TagsPage() {
 
     // 搜索时重置到第一页
     const handleSearchChange = (val: string) => {
-        setSearchQuery(val);
-        setPage(1);
+        setSearch(val);
     };
 
-    // 表头排序：同列切换方向，新列默认升序（媒体数/时间列默认降序）
+    // 表头排序：同列切换方向，新列默认升序（媒体数列默认降序），自动重置到第一页
     const handleSort = (key: string) => {
-        if (sortBy === key) {
-            setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortBy(key);
-            setSortOrder(key === 'mediaCount' ? 'desc' : 'asc');
-        }
-        setPage(1);
+        setSort(key);
     };
 
     const handleCreate = async () => {

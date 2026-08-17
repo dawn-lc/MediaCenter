@@ -71,7 +71,7 @@
     border-radius: var(--radius-sm);
     max-height: 200px;
     overflow-y: auto;
-    z-index: 300;
+    z-index: var(--z-dropdown);
     box-shadow: var(--shadow);
 }
 

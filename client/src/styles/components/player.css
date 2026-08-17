@@ -24,6 +24,41 @@
     display: block;
 }
 
+/* 视频画面手势：允许纵向滚动页面，横向拖动交由自定义逻辑处理（seek） */
+.player-wrapper video {
+    touch-action: pan-y;
+}
+
+/* 视频画面拖动进度手势容器与浮层 */
+.player-wrapper .video-gesture-wrap {
+    position: relative;
+}
+
+.video-seek-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: var(--z-player-overlay);
+}
+
+.video-seek-overlay .seek-divider {
+    opacity: 0.6;
+    font-weight: 400;
+}
+
 .player-main {
     display: flex;
     flex-direction: column;
