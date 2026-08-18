@@ -1,10 +1,10 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { Media } from '../types';
-import { getMediaIcon, formatDuration } from '../utils';
-import { usePlaylistStore } from '../stores/playlist';
-import { LIST_ITEM_HEIGHT as ITEM_HEIGHT, VIRTUAL_SCROLL_OVERSCAN as OVERSCAN, SCROLLBAR_WIDTH, WHEEL_STEP } from '../config';
+import type { Media } from '../../types';
+import { getMediaIcon, formatDuration } from '../../utils';
+import { usePlaylistStore } from '../../stores/playlist';
+import { LIST_ITEM_HEIGHT as ITEM_HEIGHT, VIRTUAL_SCROLL_OVERSCAN as OVERSCAN, SCROLLBAR_WIDTH, WHEEL_STEP } from '../../config';
 
 interface Props {
     media: Media;

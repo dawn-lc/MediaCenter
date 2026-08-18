@@ -1,17 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Api } from '../api';
-import type { Tag } from '../types';
-import { notify } from '../utils/notify';
+import { Api } from '../../api';
+import type { Tag } from '../../types';
+import { notify } from '../../utils/notify';
 import { useQuery } from '@tanstack/react-query';
-import AdminGuard from '../components/AdminGuard';
-import SortableTh from '../components/SortableTh';
-import LoadingState from '../components/LoadingState';
-import Pagination from '../components/Pagination';
-import { showConfirm } from '../components/ConfirmDialog';
-import { useClickOutside } from '../hooks/useClickOutside';
-import { useAdminTableState } from '../hooks/useAdminTableState';
-import { ADMIN_PAGE_SIZE } from '../config';
+import AdminGuard from '../../components/auth/AdminGuard';
+import SortableTh from '../../components/list/SortableTh';
+import LoadingState from '../../components/feedback/LoadingState';
+import Pagination from '../../components/list/Pagination';
+import { showConfirm } from '../../components/feedback/ConfirmDialog';
+import { useClickOutside } from '../../hooks/useClickOutside';
+import { useAdminTableState } from '../../hooks/useAdminTableState';
+import { ADMIN_PAGE_SIZE } from '../../config';
 
 /** 行内编辑中的行状态 */
 interface EditingRow {

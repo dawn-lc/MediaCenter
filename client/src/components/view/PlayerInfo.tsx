@@ -2,10 +2,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
-import type { Media } from '../types';
-import { getTagGroupMap } from '../utils';
+import type { Media } from '../../types';
+import { getTagGroupMap } from '../../utils';
 import PlayerMeta from './PlayerMeta';
-import Modal from '../components/Modal';
+import Modal from '../../components/feedback/Modal';
 
 function isTrustedImageUrl(src: string): boolean {
     try {

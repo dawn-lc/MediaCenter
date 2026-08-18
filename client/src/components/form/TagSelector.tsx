@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Api } from '../api';
-import type { Tag } from '../types';
-import { useClickOutside } from '../hooks/useClickOutside';
+import { Api } from '../../api';
+import type { Tag } from '../../types';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 interface Props {
     selected: string[];

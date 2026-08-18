@@ -6,9 +6,9 @@ import { Api } from '../api';
 import { useAuthStore } from '../stores/auth';
 import { queryClient } from '../queryClient';
 import { formatFileSize } from '../utils';
-import TagList from '../components/TagList';
-import MediaCard from '../components/MediaCard';
-import LoadingState from '../components/LoadingState';
+import TagList from '../components/list/TagList';
+import MediaCard from '../components/list/MediaCard';
+import LoadingState from '../components/feedback/LoadingState';
 
 /**
  * 首页概览（真正的 Home 页）

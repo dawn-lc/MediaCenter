@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Api } from '../api';
-import { notify } from '../utils/notify';
-import { useAuthStore } from '../stores/auth';
-import AdminGuard from '../components/AdminGuard';
-import { showConfirm } from '../components/ConfirmDialog';
+import { Api } from '../../api';
+import { notify } from '../../utils/notify';
+import { useAuthStore } from '../../stores/auth';
+import AdminGuard from '../../components/auth/AdminGuard';
+import { showConfirm } from '../../components/feedback/ConfirmDialog';
 
 export default function AdminPage() {
     const navigate = useNavigate();

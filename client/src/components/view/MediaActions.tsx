@@ -1,9 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { Media } from '../types';
-import { useAuthStore } from '../stores/auth';
-import { Api, resolveApiUrl } from '../api';
-import { notify } from '../utils/notify';
+import type { Media } from '../../types';
+import { useAuthStore } from '../../stores/auth';
+import { Api, resolveApiUrl } from '../../api';
+import { notify } from '../../utils/notify';
 
 interface Props {
     media: Media;

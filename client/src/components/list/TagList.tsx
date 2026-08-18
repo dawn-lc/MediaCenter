@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getTagGroupMap } from '../utils';
+import { getTagGroupMap } from '../../utils';
 
 interface Props {
     tags: { id: string; name: string }[];

@@ -7,10 +7,10 @@ import { notify } from '../utils/notify';
 import type { Media } from '../types';
 import { getMediaType } from '../utils';
 import { usePlaylistStore } from '../stores/playlist';
-import VideoPlayer from '../players/VideoPlayer';
-import AudioPlayer from '../players/AudioPlayer';
-import ImageViewer from '../players/ImageViewer';
-import LoadingState from '../components/LoadingState';
+import VideoPlayer from '../components/view/VideoPlayer';
+import AudioPlayer from '../components/view/AudioPlayer';
+import ImageViewer from '../components/view/ImageViewer';
+import LoadingState from '../components/feedback/LoadingState';
 
 export default function PlayerPage() {
     const { t } = useTranslation();
@@ -47,7 +47,7 @@ export default function PlayerPage() {
                 // （否则 queue 为空时 getNextIndex 恒为 -1，循环/单曲循环等模式无法重播当前视频）
                 const st = usePlaylistStore.getState();
                 if (!st.queue.some((m) => m.id === id)) {
-                    usePlaylistStore.setState({ queue: [data.media], currentIndex: 0 });
+                    usePlaylistStore.getState().playAll([data.media], 0);
                 }
             })
             .catch((err: Error) => {

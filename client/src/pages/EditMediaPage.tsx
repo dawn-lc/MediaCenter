@@ -6,11 +6,11 @@ import { ApiError } from '../apiError';
 import type { Media } from '../types';
 import { useAuthStore } from '../stores/auth';
 import { notify } from '../utils/notify';
-import TagSelector from '../components/TagSelector';
-import AuthorSelector from '../components/AuthorSelector';
-import LoadingState from '../components/LoadingState';
-import EmptyState from '../components/EmptyState';
-import { showConfirm } from '../components/ConfirmDialog';
+import TagSelector from '../components/form/TagSelector';
+import AuthorSelector from '../components/form/AuthorSelector';
+import LoadingState from '../components/feedback/LoadingState';
+import EmptyState from '../components/feedback/EmptyState';
+import { showConfirm } from '../components/feedback/ConfirmDialog';
 
 export default function EditMediaPage() {
     const { t } = useTranslation();

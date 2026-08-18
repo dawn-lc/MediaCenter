@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import type { Media } from '../types';
-import { usePlaylistStore } from '../stores/playlist';
-import { usePlayerSettings } from '../stores/playerSettings';
+import type { Media } from '../../types';
+import { usePlaylistStore } from '../../stores/playlist';
+import { usePlayerSettings } from '../../stores/playerSettings';
 import { useTranslation } from 'react-i18next';
 import PlayerControls from './PlayerControls';
 import PlayerInfo from './PlayerInfo';

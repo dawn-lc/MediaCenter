@@ -1,9 +1,9 @@
-import type { Media } from '../types';
-import { formatFileSize, formatDate, formatDuration, isValidHttpUrl } from '../utils';
+import type { Media } from '../../types';
+import { formatFileSize, formatDate, formatDuration, isValidHttpUrl } from '../../utils';
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore } from '../../stores/auth';
 import { useNavigate } from 'react-router-dom';
-import i18n from '../i18n';
+import i18n from '../../i18n';
 
 interface PlayerMetaProps {
     media: Media;

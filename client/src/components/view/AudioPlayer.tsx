@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { Api } from '../api';
-import type { Media } from '../types';
-import { usePlaylistStore } from '../stores/playlist';
-import { usePlayerSettings } from '../stores/playerSettings';
-import { useStreamToken } from '../hooks/useStreamToken';
-import { resolveApiUrl } from '../api';
+import { Api } from '../../api';
+import type { Media } from '../../types';
+import { usePlaylistStore } from '../../stores/playlist';
+import { usePlayerSettings } from '../../stores/playerSettings';
+import { useStreamToken } from '../../hooks/useStreamToken';
+import { resolveApiUrl } from '../../api';
 import PlayerLayout from './PlayerLayout';
 
 interface Props {

@@ -10,15 +10,17 @@ import App from './App';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const MediaLibraryPage = lazy(() => import('./pages/MediaLibraryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const UserPage = lazy(() => import('./pages/UserPage'));
-const AuthorPage = lazy(() => import('./pages/AuthorPage'));
+// 公开详情页（单数命名，按用途归 public/）
+const UserPage = lazy(() => import('./pages/public/UserPage'));
+const AuthorPage = lazy(() => import('./pages/public/AuthorPage'));
 const PlayerPage = lazy(() => import('./pages/PlayerPage'));
 const EditMediaPage = lazy(() => import('./pages/EditMediaPage'));
 const UploadPage = lazy(() => import('./pages/UploadPage'));
-const AdminPage = lazy(() => import('./pages/AdminPage'));
-const TagsPage = lazy(() => import('./pages/TagsPage'));
-const AuthorsPage = lazy(() => import('./pages/AuthorsPage'));
-const UsersPage = lazy(() => import('./pages/UsersPage'));
+// 管理页（复数命名，按用途归 admin/）
+const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
+const TagsPage = lazy(() => import('./pages/admin/TagsPage'));
+const AuthorsPage = lazy(() => import('./pages/admin/AuthorsPage'));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 
 export const router = createBrowserRouter([
     {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useThemeStore, type ThemePref } from '../stores/theme';
-import { MonitorIcon, MoonIcon, SunIcon } from './Icons';
+import { useThemeStore, type ThemePref } from '../../stores/theme';
+import { MonitorIcon, MoonIcon, SunIcon } from '../base/Icons';
 
 const OPTIONS: { value: ThemePref; icon: ReactElement }[] = [
     { value: 'system', icon: <MonitorIcon /> },

@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { apiUrl } from '../api';
-import { useAuthStore } from '../stores/auth';
+import { apiUrl } from '../../api';
+import { useAuthStore } from '../../stores/auth';
 
 // ---------------------------------------------------------------------------
 // PWAProvider

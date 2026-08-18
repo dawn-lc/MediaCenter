@@ -5,7 +5,7 @@ import i18n from '../i18n';
 import { Api, apiUrl } from '../api';
 import { notify } from '../utils/notify';
 import { useAuthStore } from '../stores/auth';
-import EmptyState from '../components/EmptyState';
+import EmptyState from '../components/feedback/EmptyState';
 import { STORAGE_PREFIX } from '../config';
 
 export default function UploadPage() {

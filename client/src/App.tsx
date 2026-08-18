@@ -1,10 +1,10 @@
 import { Suspense, useCallback, useEffect, useRef } from 'react';
 import { Outlet, ScrollRestoration, useLocation, useNavigationType } from 'react-router-dom';
 import { Toaster, toast, useSonner } from 'sonner';
-import Navbar from './components/Navbar';
-import ConfirmDialog from './components/ConfirmDialog';
-import LoadingState from './components/LoadingState';
-import ThemeToggle from './components/ThemeToggle';
+import Navbar from './components/layout/Navbar';
+import ConfirmDialog from './components/feedback/ConfirmDialog';
+import LoadingState from './components/feedback/LoadingState';
+import ThemeToggle from './components/theme/ThemeToggle';
 import { TOAST_GAP } from './config';
 import './styles/index.css';
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore } from '../../stores/auth';
 import { useTranslation } from 'react-i18next';
-import EmptyState from './EmptyState';
+import EmptyState from '../feedback/EmptyState';
 
 interface Props {
     children: ReactNode;

@@ -1,18 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Api } from '../api';
-import type { User } from '../types';
-import { useAuthStore } from '../stores/auth';
-import { notify } from '../utils/notify';
+import { Api } from '../../api';
+import type { User } from '../../types';
+import { useAuthStore } from '../../stores/auth';
+import { notify } from '../../utils/notify';
 import { useQuery } from '@tanstack/react-query';
-import AdminGuard from '../components/AdminGuard';
-import SortableTh from '../components/SortableTh';
-import Modal from '../components/Modal';
-import LoadingState from '../components/LoadingState';
-import Pagination from '../components/Pagination';
-import { showConfirm } from '../components/ConfirmDialog';
-import { useAdminTableState } from '../hooks/useAdminTableState';
+import AdminGuard from '../../components/auth/AdminGuard';
+import SortableTh from '../../components/list/SortableTh';
+import Modal from '../../components/feedback/Modal';
+import LoadingState from '../../components/feedback/LoadingState';
+import Pagination from '../../components/list/Pagination';
+import { showConfirm } from '../../components/feedback/ConfirmDialog';
+import { useAdminTableState } from '../../hooks/useAdminTableState';
 
 export default function UsersPage() {
     const { t } = useTranslation();

@@ -1,12 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore } from '../../stores/auth';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Api, AUTH_REFRESH_STORAGE_KEY } from '../api';
-import { notify } from '../utils/notify';
-import Modal from './Modal';
-import { useClickOutside } from '../hooks/useClickOutside';
-import { STORAGE_PREFIX } from '../config';
+import { Api, AUTH_REFRESH_STORAGE_KEY } from '../../api';
+import { notify } from '../../utils/notify';
+import Modal from '../feedback/Modal';
+import { useClickOutside } from '../../hooks/useClickOutside';
+import { STORAGE_PREFIX } from '../../config';
 
 export default function Navbar() {
     const { t } = useTranslation();

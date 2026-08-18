@@ -8,10 +8,10 @@ import { usePlayerSettings } from '../stores/playerSettings';
 import { notify } from '../utils/notify';
 import { changeLanguage, LANGUAGES } from '../i18n';
 import { formatDate } from '../utils';
-import MediaCard from '../components/MediaCard';
-import Pagination from '../components/Pagination';
-import LoadingState from '../components/LoadingState';
-import ToggleSwitch from '../components/ToggleSwitch';
+import MediaCard from '../components/list/MediaCard';
+import Pagination from '../components/list/Pagination';
+import LoadingState from '../components/feedback/LoadingState';
+import ToggleSwitch from '../components/form/ToggleSwitch';
 
 /** 个人中心"我的媒体"分页每页条数 */
 const PROFILE_PAGE_SIZE = 12;

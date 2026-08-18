@@ -821,7 +821,8 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             .select({
                 uploaderId: schema.media.uploaderId,
                 filePath: schema.media.filePath,
-                mimeType: schema.media.mimeType
+                mimeType: schema.media.mimeType,
+                authorId: schema.media.authorId
             })
             .from(schema.media)
             .where(and(eq(schema.media.id, id), req.user?.role !== 'admin' ? isNull(schema.media.deletedAt) : undefined))
@@ -879,6 +880,31 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
             const author = body.author;
             if (isString(author)) {
                 updates.authorId = await resolveAuthorId(author, req.user!.role!);
+            }
+
+            // 作者别名：同步到作者记录（外部工具推送时附带；合并去重，不覆盖已有别名）
+            if (!isNullOrUndefined(body.altNames)) {
+                const altRaw = isArray(body.altNames) ? body.altNames : [body.altNames];
+                const altNames = altRaw.filter(isString).map((a) => a.trim()).filter(isNotEmpty);
+                const targetAuthorId: string | undefined = (updates.authorId as string | undefined) ?? mediaRecord.authorId ?? undefined;
+                if (targetAuthorId && altNames.length > 0) {
+                    const [authorRow] = await db
+                        .select({ altNames: schema.authors.altNames })
+                        .from(schema.authors)
+                        .where(eq(schema.authors.id, targetAuthorId))
+                        .limit(1)
+                        .execute();
+                    if (authorRow) {
+                        const merged = [...new Set([...(authorRow.altNames ?? []), ...altNames])];
+                        if (merged.length !== (authorRow.altNames ?? []).length) {
+                            await db
+                                .update(schema.authors)
+                                .set({ altNames: merged })
+                                .where(eq(schema.authors.id, targetAuthorId))
+                                .execute();
+                        }
+                    }
+                }
             }
         }
 

@@ -1,15 +1,15 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { usePlaylistStore } from '../stores/playlist';
-import { usePlayerSettings } from '../stores/playerSettings';
-import { useAuthStore } from '../stores/auth';
-import { Api } from '../api';
-import type { LoopMode, PlayOrder } from '../stores/playlist';
-import type { Media } from '../types';
-import { getMediaType } from '../utils';
-import { notify } from '../utils/notify';
-import Modal from '../components/Modal';
+import { usePlaylistStore } from '../../stores/playlist';
+import { usePlayerSettings } from '../../stores/playerSettings';
+import { useAuthStore } from '../../stores/auth';
+import { Api } from '../../api';
+import type { LoopMode, PlayOrder } from '../../stores/playlist';
+import type { Media } from '../../types';
+import { getMediaType } from '../../utils';
+import { notify } from '../../utils/notify';
+import Modal from '../../components/feedback/Modal';
 
 interface Props {
     media: Media;
@@ -29,11 +29,8 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const goPrev = () => {
         const state = usePlaylistStore.getState();
         if (state.queue.length <= 1) return;
-        let prevIdx = state.currentIndex - 1;
-        // 列表循环/随机/手动模式在首项时回绕到末项
-        if (prevIdx < 0 && (state.loopMode === 'repeatAll' || state.playOrder === 'shuffle' || state.playOrder === 'manual')) {
-            prevIdx = state.queue.length - 1;
-        }
+        // 随机模式按打乱序列取真正的上一项；手动环形；顺序线性（repeatAll 首项回绕）
+        const prevIdx = state.getPrevIndex();
         if (prevIdx >= 0) {
             usePlaylistStore.setState({ currentIndex: prevIdx });
         }
@@ -42,22 +39,8 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const goNext = () => {
         const state = usePlaylistStore.getState();
         if (state.queue.length <= 1) return;
-        let nextIdx: number;
-        // 手动模式：始终环形推进到下一项（播放完仍不自动推进，由 ended 逻辑保持）
-        if (state.playOrder === 'manual') {
-            nextIdx = (state.currentIndex + 1) % state.queue.length;
-        } else {
-            // 从播放模式获取下一个索引
-            nextIdx = state.getNextIndex();
-            // 单曲循环：手动切歌不重复自身，改为线性下一项
-            if (nextIdx === state.currentIndex && state.loopMode === 'repeatOne') {
-                nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
-            }
-            // 播放模式无下一项时，回退到线性下一项
-            if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
-                nextIdx = state.currentIndex + 1;
-            }
-        }
+        // 手动环形 / 单曲循环取序列下一项不重复自身 / 其余按播放模式推进
+        const nextIdx = state.getManualNext();
         if (nextIdx >= 0) {
             usePlaylistStore.setState({ currentIndex: nextIdx });
         }
@@ -100,25 +83,9 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const settings = usePlayerSettings.getState();
     const loopMode = state.loopMode;
     const playOrder = state.playOrder;
-    // 仅一个项目时锁定前后切换
-    const multi = state.queue.length > 1;
-    // 列表循环/随机/手动模式在首项时可回绕到末项
-    const hasPrev = multi && (state.currentIndex > 0 || (state.currentIndex === 0 && (loopMode === 'repeatAll' || playOrder === 'shuffle' || playOrder === 'manual') && state.queue.length > 0));
-    // 根据播放模式判断是否有下一项
-    let nextIdx = multi ? state.getNextIndex() : -1;
-    if (playOrder === 'manual') {
-        // 手动模式：始终可环形推进到下一项
-        nextIdx = multi ? (state.currentIndex + 1) % state.queue.length : -1;
-    } else {
-        if (nextIdx === state.currentIndex && loopMode === 'repeatOne') {
-            nextIdx = state.currentIndex < state.queue.length - 1 ? state.currentIndex + 1 : -1;
-        }
-        // 播放模式无下一项但队列中还有后续项时仍可手动导航
-        if (nextIdx < 0 && state.currentIndex < state.queue.length - 1) {
-            nextIdx = state.currentIndex + 1;
-        }
-    }
-    const hasNext = multi && nextIdx >= 0;
+    // 用 store 纯查询 getter（getNextIndex/getManualNext 含重洗副作用，不能在渲染期调用）
+    const hasPrev = state.hasPrev;
+    const hasNext = state.hasNext;
 
     // 键盘快捷键（Ctrl 前缀：播单切换）
     useEffect(() => {

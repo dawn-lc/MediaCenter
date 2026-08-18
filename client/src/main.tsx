@@ -2,7 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
-import PWAProvider from './components/PWAProvider';
+import PWAProvider from './components/layout/PWAProvider';
 import { queryClient } from './queryClient';
 import { requestPersistentStorage } from './utils/storage';
 import 'video.js/dist/video-js.css';

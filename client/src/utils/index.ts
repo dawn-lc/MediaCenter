@@ -1,5 +1,5 @@
-import i18n from './i18n';
-import { TAG_EXPR_MAX_LENGTH, TAG_EXPR_MAX_DEPTH, BYTE_BASE, BYTE_UNITS, JUST_NOW_THRESHOLD_MS } from './config';
+import i18n from '../i18n';
+import { TAG_EXPR_MAX_LENGTH, TAG_EXPR_MAX_DEPTH, BYTE_BASE, BYTE_UNITS, JUST_NOW_THRESHOLD_MS } from '../config';
 
 export function formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 B';

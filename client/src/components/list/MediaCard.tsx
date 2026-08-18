@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { resolveApiUrl } from '../api';
-import type { Media } from '../types';
-import { formatDate, formatFileSize, getMediaIcon, getMediaTypeLabel } from '../utils';
-import { obtainThumbnailUrl } from '../utils/thumbnails';
+import { resolveApiUrl } from '../../api';
+import type { Media } from '../../types';
+import { formatDate, formatFileSize, getMediaIcon, getMediaTypeLabel } from '../../utils';
+import { obtainThumbnailUrl } from '../../utils/thumbnails';
 
 /**
  * 媒体卡片所需字段子集：

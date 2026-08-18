@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { Media } from '../types';
-import { formatDuration } from '../utils';
-import { usePlaylistStore } from '../stores/playlist';
-import { usePlayerSettings } from '../stores/playerSettings';
-import { resolveApiUrl } from '../api';
-import { IMAGE_SLIDE_INTERVAL_MS } from '../config';
+import type { Media } from '../../types';
+import { formatDuration } from '../../utils';
+import { usePlaylistStore } from '../../stores/playlist';
+import { usePlayerSettings } from '../../stores/playerSettings';
+import { resolveApiUrl } from '../../api';
+import { IMAGE_SLIDE_INTERVAL_MS } from '../../config';
 import PlayerLayout from './PlayerLayout';
 
 interface Props {

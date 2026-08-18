@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Api } from '../api';
-import type { Media } from '../types';
-import { usePlaylistStore } from '../stores/playlist';
-import { usePlayerSettings } from '../stores/playerSettings';
-import { useStreamToken } from '../hooks/useStreamToken';
-import { resolveApiUrl } from '../api';
-import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO, VIDEO_DRAG_SEEK_THRESHOLD, VIDEO_DOUBLE_CLICK_MS } from '../config';
+import { Api } from '../../api';
+import type { Media } from '../../types';
+import { usePlaylistStore } from '../../stores/playlist';
+import { usePlayerSettings } from '../../stores/playerSettings';
+import { useStreamToken } from '../../hooks/useStreamToken';
+import { resolveApiUrl } from '../../api';
+import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO, VIDEO_DRAG_SEEK_THRESHOLD, VIDEO_DOUBLE_CLICK_MS } from '../../config';
 import PlayerLayout from './PlayerLayout';
 
 /** 进度浮层时间格式化（浏览器原生 Intl，UTC 基准）：0 秒显示 0:00、分钟不补前导零；支持 >=24h 不进位 */

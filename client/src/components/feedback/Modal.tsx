@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { MODAL_CLOSE_MS } from '../config';
+import { MODAL_CLOSE_MS } from '../../config';
 
 interface Props {
     open: boolean;
