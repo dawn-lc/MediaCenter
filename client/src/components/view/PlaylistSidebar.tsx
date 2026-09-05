@@ -193,7 +193,8 @@ export default function PlaylistSidebar({ media }: Props) {
 
     const clearPlaylist = useCallback(() => {
         clear();
-        navigate('/');
+        // 退出播放流程 → 回媒体库（首页改版后 / 是概览，媒体库在 /library）
+        navigate('/library');
     }, [clear, navigate]);
 
     const formatItemDuration = useCallback((item: Media) => {

@@ -45,7 +45,7 @@ export default function PlayerLayout({
             </div>
             <div className="player-below">
                 <div className="player-main">
-                    <PlayerControls media={media} countdown={countdown} />
+                    {playlist.queue.length > 1 && <PlayerControls media={media} countdown={countdown} />}
                     <PlayerInfo media={media} metaExtra={metaExtra} />
                     <div className="actions-card">
                         <div className="actions-group">

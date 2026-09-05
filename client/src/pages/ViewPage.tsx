@@ -12,7 +12,7 @@ import AudioPlayer from '../components/view/AudioPlayer';
 import ImageViewer from '../components/view/ImageViewer';
 import LoadingState from '../components/feedback/LoadingState';
 
-export default function PlayerPage() {
+export default function ViewPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
@@ -43,12 +43,8 @@ export default function PlayerPage() {
             .then((data) => {
                 setMedia(data.media);
                 setMediaType(getMediaType(data.media.mimeType));
-                // 单曲播放：若当前媒体不在播放列表，设为单曲队列
-                // （否则 queue 为空时 getNextIndex 恒为 -1，循环/单曲循环等模式无法重播当前视频）
-                const st = usePlaylistStore.getState();
-                if (!st.queue.some((m) => m.id === id)) {
-                    usePlaylistStore.getState().playAll([data.media], 0);
-                }
+                // 单曲播放判断统一交给「持久化恢复完成兜底 effect」：
+                // 此处不判断，避免持久化恢复未完成时（queue 仍为空）误把整队列覆盖成单曲（会阻断恢复）
             })
             .catch((err: Error) => {
                 // 403 由页面状态呈现；其余错误统一弹 toast（会话过期自动静默）
@@ -64,6 +60,7 @@ export default function PlayerPage() {
     // 监听播放列表切换（上一首/下一首/点击列表项）→ 不重载页面
     const currentIndex = usePlaylistStore((s) => s.currentIndex);
     const queue = usePlaylistStore((s) => s.queue);
+    const isHydrated = usePlaylistStore((s) => s.isHydrated);
     useEffect(() => {
         // 首次挂载由 URL 驱动 effect 处理，跳过此处避免覆盖
         if (!isMountedRef.current) {
@@ -103,7 +100,18 @@ export default function PlayerPage() {
             });
     }, [currentIndex, queue]);
 
-    if (loading) return <LoadingState />;
+    // 持久化恢复完成后的单曲兜底：当前媒体不在恢复出的队列 → 设为单曲队列
+    // （否则 queue 为空时 getNextIndex 恒为 -1，循环/单曲循环等模式无法重播当前视频）
+    useEffect(() => {
+        if (!isHydrated || !media) return;
+        const st = usePlaylistStore.getState();
+        if (!st.queue.some((m) => m.id === media.id)) {
+            usePlaylistStore.getState().playAll([media], 0);
+        }
+    }, [isHydrated, media]);
+
+    // 首次加载（无 media）显示 LoadingState；切歌时保留页面框架，播放器换源平滑过渡
+    if (loading && !media) return <LoadingState />;
 
     if (!media)
         return (
@@ -132,9 +140,10 @@ export default function PlayerPage() {
             </div>
         );
 
-    if (mediaType === 'video') return <VideoPlayer key={media.id} media={media} />;
-    if (mediaType === 'audio') return <AudioPlayer key={media.id} media={media} />;
-    if (mediaType === 'image') return <ImageViewer key={media.id} media={media} />;
+    // 播放器组件不设 key：media 变化时由播放器内部换源（避免卸载重建导致的整页重载感）
+    if (mediaType === 'video') return <VideoPlayer media={media} />;
+    if (mediaType === 'audio') return <AudioPlayer media={media} />;
+    if (mediaType === 'image') return <ImageViewer media={media} />;
 
     return (
         <div className="empty-state">

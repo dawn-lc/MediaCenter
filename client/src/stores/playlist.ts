@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Media } from '../types';
 import { DEBOUNCE_MS, STORAGE_PREFIX } from '../config';
+import { idbLoadPlaylist, idbSavePlaylist, idbClearPlaylist, idbLoadPlaylistMeta, idbLoadPlaylistQueueSync } from '../utils/idbPlaylist';
 
 const STORAGE_KEY = STORAGE_PREFIX + 'playlist';
 
@@ -37,16 +38,10 @@ function scheduleSave() {
 }
 
 function doSave() {
-    try {
-        const { queue, currentIndex, loopMode, playOrder } = usePlaylistStore.getState();
-        const lightQueue = queue.map(sanitizeForStorage);
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify({ queue: lightQueue, index: currentIndex, loopMode, playOrder })
-        );
-    } catch {
-        /* */
-    }
+    const { queue, currentIndex, loopMode, playOrder } = usePlaylistStore.getState();
+    const lightQueue = queue.map(sanitizeForStorage);
+    // IndexedDB 持久化（容量远大于 localStorage，12 万+ 项队列无压力）
+    void idbSavePlaylist({ queue: lightQueue, index: currentIndex, loopMode, playOrder });
 }
 
 interface SavedPlaylist {
@@ -89,7 +84,20 @@ function load(): SavedPlaylist | null {
     }
 }
 
-const saved = load();
+/** 同步初始值：旧 localStorage（IndexedDB 异步加载完成前的快速恢复 + 迁移来源） */
+const legacySaved = load();
+
+/** 新格式元数据（index/loopMode/playOrder 存 localStorage，首帧同步恢复播放模式，不等队列异步加载） */
+const savedMeta = idbLoadPlaylistMeta();
+
+/** 新格式小队列（≤4096 项存 localStorage，首帧同步恢复，避免异步竞态导致 ViewPage 误覆盖为单曲） */
+const savedQueue = idbLoadPlaylistQueueSync();
+
+/** 是否有持久化数据待异步确认（大队列在 IndexedDB）；无则首帧即视为已就绪 */
+const hasPersisted = !!savedMeta || (savedQueue?.length ?? 0) > 0;
+
+/** 用户是否已手动操作播放列表（避免异步加载覆盖用户操作） */
+let userActed = false;
 
 /** Fisher-Yates 洗牌：返回 0..n-1 的随机排列（随机播放的打乱序列） */
 function makeShuffleOrder(n: number): number[] {
@@ -106,13 +114,16 @@ interface PlaylistState {
     currentIndex: number;
     loopMode: LoopMode;
     playOrder: PlayOrder;
+    /** 持久化恢复是否已完成（大队列在 IndexedDB 需异步；ViewPage 等它完成再判断单曲播放） */
+    isHydrated: boolean;
     /** 随机模式下的打乱序列：原始 queue 索引的随机排列（仅内存，不持久化，避免 localStorage 膨胀） */
     shuffleOrder: number[];
-    total: number;
-    position: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-    current: Media | null;
+    /** 以下均为方法而非 getter：zustand v5 的 setState 用 Object.assign 会触发 getter 求值并固化为值，导致永不更新 */
+    total(): number;
+    position(): number;
+    hasNext(): boolean;
+    hasPrev(): boolean;
+    current(): Media | null;
     playAll(list: Media[], startIndex?: number): void;
     append(list: Media[]): void;
     removeById(id: string): string | null;
@@ -130,25 +141,29 @@ interface PlaylistState {
 }
 
 export const usePlaylistStore = create<PlaylistState>((set, get) => ({
-    queue: saved?.queue ?? [],
-    currentIndex: saved?.index ?? -1,
-    loopMode: saved?.loopMode ?? 'off',
-    playOrder: saved?.playOrder ?? 'sequential',
+    // 小队列从 localStorage 同步恢复（大队列由异步初始化补）；旧 legacySaved 兜底
+    queue: (savedQueue as Media[]) ?? legacySaved?.queue ?? [],
+    // 新格式元数据优先（localStorage 同步）；旧 legacySaved 兜底
+    currentIndex: savedMeta?.index ?? legacySaved?.index ?? -1,
+    loopMode: savedMeta?.loopMode ?? legacySaved?.loopMode ?? 'off',
+    playOrder: savedMeta?.playOrder ?? legacySaved?.playOrder ?? 'sequential',
+    // 无持久化数据 → 直接就绪；有则等异步初始化确认
+    isHydrated: !hasPersisted,
     // 初始即生成打乱序列（切到随机时可直接使用）
-    shuffleOrder: makeShuffleOrder(saved?.queue?.length ?? 0),
+    shuffleOrder: makeShuffleOrder((savedQueue ?? legacySaved?.queue ?? []).length),
 
-    get current() {
+    current() {
         const { queue, currentIndex } = get();
         return currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
     },
-    get total() {
+    total() {
         return get().queue.length;
     },
-    get position() {
+    position() {
         const i = get().currentIndex;
         return i >= 0 ? i + 1 : 0;
     },
-    get hasNext() {
+    hasNext() {
         const { queue, currentIndex, loopMode, playOrder } = get();
         if (queue.length <= 1) return false;
         // 手动：可手动切歌
@@ -160,7 +175,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         if (loopMode === 'repeatAll') return true;
         return currentIndex < queue.length - 1;
     },
-    get hasPrev() {
+    hasPrev() {
         const { queue, currentIndex, loopMode, playOrder, shuffleOrder } = get();
         if (queue.length <= 1) return false;
         // 手动：环形
@@ -175,21 +190,24 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     },
 
     playAll: (list, startIndex = 0) => {
-        set({ queue: list, currentIndex: startIndex, shuffleOrder: makeShuffleOrder(list.length) });
+        userActed = true;
+        set({ queue: list, currentIndex: startIndex, shuffleOrder: makeShuffleOrder(list.length), isHydrated: true });
         scheduleSave();
     },
 
     append: (list) => {
+        userActed = true;
         const { queue, shuffleOrder } = get();
         const newQueue = [...queue, ...list];
         const start = queue.length;
         // 已有打乱顺序保持稳定，新索引追加到末尾
         const newOrder = [...shuffleOrder, ...Array.from({ length: list.length }, (_, i) => start + i)];
-        set({ queue: newQueue, shuffleOrder: newOrder });
+        set({ queue: newQueue, shuffleOrder: newOrder, isHydrated: true });
         scheduleSave();
     },
 
     removeById: (id) => {
+        userActed = true;
         const { queue, currentIndex } = get();
         const idx = queue.findIndex((m) => m.id === id);
         if (idx === -1) return null;
@@ -200,14 +218,15 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
             newIndex = idx < newQueue.length ? idx : newQueue.length - 1;
         }
         // 移除后重建打乱序列，避免索引漂移
-        set({ queue: newQueue, currentIndex: newIndex, shuffleOrder: makeShuffleOrder(newQueue.length) });
+        set({ queue: newQueue, currentIndex: newIndex, shuffleOrder: makeShuffleOrder(newQueue.length), isHydrated: true });
         scheduleSave();
         return newQueue[newIndex]?.id ?? null;
     },
 
     clear: () => {
-        set({ queue: [], currentIndex: -1, shuffleOrder: [] });
-        doSave(); // 同步保存，避免 navigate 页面卸载后 debounce 未触发
+        userActed = true;
+        set({ queue: [], currentIndex: -1, shuffleOrder: [], isHydrated: true });
+        void idbClearPlaylist(); // 清空持久化（meta + 小队列 + IndexedDB 大队列）
     },
 
     setLoopMode: (mode) => {
@@ -301,3 +320,41 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         return loopMode === 'repeatAll' ? queue.length - 1 : -1;
     }
 }));
+
+// 异步从持久化加载播放列表（大队列在 IndexedDB；小队列已同步恢复），并迁移旧数据
+void (async () => {
+    const idb = await idbLoadPlaylist();
+    if (idb) {
+        // 有数据：若用户尚未手动操作则恢复（避免异步加载覆盖用户操作）
+        if (!userActed) {
+            usePlaylistStore.setState({
+                queue: idb.queue as Media[],
+                currentIndex: idb.index,
+                loopMode: idb.loopMode,
+                playOrder: idb.playOrder,
+                // shuffleOrder 不持久化，恢复时需按队列长度重建（否则空数组导致 hasPrev 恒 false、
+                // 首次「下一个」误触发 _reshuffle 把当前项当序列末位）
+                shuffleOrder: makeShuffleOrder(idb.queue.length),
+                isHydrated: true
+            });
+        } else {
+            // 用户已手动操作，不覆盖；仅标记恢复流程结束
+            usePlaylistStore.setState({ isHydrated: true });
+        }
+        // 旧 localStorage 数据已迁入持久化，清除
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+    } else if (legacySaved && !userActed) {
+        // 首次迁移：localStorage → 新格式（meta 走 LS / 队列按长度分级）
+        await idbSavePlaylist({
+            queue: legacySaved.queue.map(sanitizeForStorage),
+            index: legacySaved.index,
+            loopMode: legacySaved.loopMode,
+            playOrder: legacySaved.playOrder
+        });
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+        usePlaylistStore.setState({ isHydrated: true });
+    } else {
+        // 无数据可恢复（或用户已操作）：直接就绪
+        usePlaylistStore.setState({ isHydrated: true });
+    }
+})();

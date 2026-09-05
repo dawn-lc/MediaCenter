@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { usePlaylistStore } from '../../stores/playlist';
 import { usePlayerSettings } from '../../stores/playerSettings';
 import { useAuthStore } from '../../stores/auth';
+import { useLatest } from '../../hooks/useLatest';
 import { Api } from '../../api';
 import type { LoopMode, PlayOrder } from '../../stores/playlist';
 import type { Media } from '../../types';
@@ -21,10 +22,11 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
     const navigate = useNavigate();
     const playlist = usePlaylistStore();
     const playerSettings = usePlayerSettings();
-    const { queue } = playlist;
-    const total = queue.length;
     const [showDuration, setShowDuration] = useState(false);
     const [durationInput, setDurationInput] = useState('');
+
+    // 始终持有最新 media 引用（键盘闭包只注册一次，需从 ref 读取当前媒体）
+    const mediaRef = useLatest(media);
 
     const goPrev = () => {
         const state = usePlaylistStore.getState();
@@ -78,14 +80,14 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
         setShowDuration(false);
     };
 
-    // 实时计算 hasNext/hasPrev，绕过 Zustand getter 固化问题
+    // hasNext/hasPrev 为方法（zustand getter 会被 Object.assign 固化），渲染期调用动态取值
     const state = usePlaylistStore.getState();
     const settings = usePlayerSettings.getState();
     const loopMode = state.loopMode;
     const playOrder = state.playOrder;
-    // 用 store 纯查询 getter（getNextIndex/getManualNext 含重洗副作用，不能在渲染期调用）
-    const hasPrev = state.hasPrev;
-    const hasNext = state.hasNext;
+    // 纯查询方法（getNextIndex/getManualNext 含重洗副作用，不能在渲染期调用）
+    const hasPrev = state.hasPrev();
+    const hasNext = state.hasNext();
 
     // 键盘快捷键（Ctrl 前缀：播单切换）
     useEffect(() => {
@@ -106,22 +108,26 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
                     e.preventDefault();
                     cycleLoop();
                     break;
-                case 'Delete':
+                case 'Delete': {
                     if (useAuthStore.getState().isAdmin) {
+                        // 从 ref 读取当前浏览的媒体（media prop 在组件内会更新，但闭包只注册一次）
+                        const current = mediaRef.current;
                         e.preventDefault();
-                        notify.promise(Api.deleteMedia(media.id), {
+                        notify.promise(Api.deleteMedia(current.id), {
                             loading: t('view.deleting'),
                             success: t('view.deleteSuccess'),
                             onSuccess: () => {
-                                const removed = usePlaylistStore.getState().removeById(media.id);
+                                const removed = usePlaylistStore.getState().removeById(current.id);
                                 // removeById 已自动将 currentIndex 更新到下一项，无需再 goNext
                                 if (removed === null) {
-                                    navigate('/');
+                                    // 无下一项 → 退出播放流程，回媒体库
+                                    navigate('/library');
                                 }
                             }
                         });
                     }
                     break;
+                }
             }
         };
         window.addEventListener('keydown', handler);
@@ -133,10 +139,10 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
             <div className="player-controls">
                 <div className="player-controls-left">
                     <button className="btn btn-secondary btn-sm" disabled={!hasPrev} onClick={goPrev}>
-                        ⏮ {t('view.prev')}
+                        {t('view.prev')}
                     </button>
                     <button className="btn btn-secondary btn-sm" disabled={!hasNext} onClick={goNext}>
-                        {t('view.next')} ⏭
+                        {t('view.next')}
                     </button>
                     {getMediaType(media.mimeType) === 'image' && (
                         <button className="btn btn-secondary btn-sm" onClick={openDurationEdit} title={t('view.setPlayDuration')}>

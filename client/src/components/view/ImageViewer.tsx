@@ -6,6 +6,7 @@ import { usePlayerSettings } from '../../stores/playerSettings';
 import { resolveApiUrl } from '../../api';
 import { IMAGE_SLIDE_INTERVAL_MS } from '../../config';
 import PlayerLayout from './PlayerLayout';
+import MediaLoading from '../feedback/MediaLoading';
 
 interface Props {
     media: Media;
@@ -14,6 +15,8 @@ interface Props {
 export default function ImageViewer({ media }: Props) {
     const playlist = usePlaylistStore();
     const [countdown, setCountdown] = useState(0);
+    // 图片是否已加载（加载中显示占位）
+    const [imgReady, setImgReady] = useState(false);
 
     // 静态图片自动定时切换 + 倒计时
     useEffect(() => {
@@ -31,7 +34,7 @@ export default function ImageViewer({ media }: Props) {
                     if (nextIdx >= 0) {
                         const item = usePlaylistStore.getState().queue[nextIdx];
                         if (item) {
-                            // 切换到下一项，PlayerPage 会监听 currentIndex 变化自动加载
+                            // 切换到下一项，ViewPage 会监听 currentIndex 变化自动加载
                             usePlaylistStore.setState({ currentIndex: nextIdx });
                         }
                     }
@@ -42,6 +45,12 @@ export default function ImageViewer({ media }: Props) {
         }, IMAGE_SLIDE_INTERVAL_MS);
         return () => clearInterval(interval);
     }, [media.id]);
+
+    // media 变化 → 显示占位，等 img onLoad 隐藏
+    useEffect(() => {
+        setImgReady(false);
+    }, [media.id]);
+
     return (
         <PlayerLayout
             media={media}
@@ -50,7 +59,14 @@ export default function ImageViewer({ media }: Props) {
             metaExtra={<>{media.duration != null && media.duration > 0 && <span>⏱️ {formatDuration(media.duration)}</span>}</>}
             actionsExtra={null}
         >
-            <img src={resolveApiUrl(media.streamUrl ?? '')} alt={media.title} className="image-display" />
+            {!imgReady && <MediaLoading />}
+            <img
+                src={resolveApiUrl(media.streamUrl ?? '')}
+                alt={media.title}
+                className="image-display"
+                onLoad={() => setImgReady(true)}
+                onError={() => setImgReady(true)}
+            />
         </PlayerLayout>
     );
 }

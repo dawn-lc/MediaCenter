@@ -13,7 +13,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 // 公开详情页（单数命名，按用途归 public/）
 const UserPage = lazy(() => import('./pages/public/UserPage'));
 const AuthorPage = lazy(() => import('./pages/public/AuthorPage'));
-const PlayerPage = lazy(() => import('./pages/PlayerPage'));
+const ViewPage = lazy(() => import('./pages/ViewPage'));
 const EditMediaPage = lazy(() => import('./pages/EditMediaPage'));
 const UploadPage = lazy(() => import('./pages/UploadPage'));
 // 管理页（复数命名，按用途归 admin/）
@@ -32,7 +32,7 @@ export const router = createBrowserRouter([
             { path: 'profile', element: <ProfilePage /> },
             { path: 'user/:id', element: <UserPage /> },
             { path: 'author/:id', element: <AuthorPage /> },
-            { path: 'view/:id', element: <PlayerPage /> },
+            { path: 'view/:id', element: <ViewPage /> },
             { path: 'edit/:id', element: <EditMediaPage /> },
             { path: 'upload', element: <UploadPage /> },
             { path: 'admin', element: <AdminPage /> },

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Api } from '../../api';
 import type { Media } from '../../types';
 import { usePlaylistStore } from '../../stores/playlist';
@@ -6,6 +6,7 @@ import { usePlayerSettings } from '../../stores/playerSettings';
 import { useStreamToken } from '../../hooks/useStreamToken';
 import { resolveApiUrl } from '../../api';
 import PlayerLayout from './PlayerLayout';
+import MediaLoading from '../feedback/MediaLoading';
 
 interface Props {
     media: Media;
@@ -17,7 +18,9 @@ export default function AudioPlayer({ media }: Props) {
     const { streamUrl, refresh } = useStreamToken(media.id, media.streamUrl);
     const savedVolume = usePlayerSettings((s) => s.volume);
     const savedMuted = usePlayerSettings((s) => s.muted);
-
+    const autoPlayVideo = usePlayerSettings((s) => s.autoPlayVideo);
+    // 媒体是否就绪（换源/加载中显示占位）
+    const [mediaReady, setMediaReady] = useState(false);
     // 应用持久化音量+静音 + 监听用户调整写回 store（与 VideoPlayer 的同步一致）
     useEffect(() => {
         const audio = audioRef.current;
@@ -95,7 +98,7 @@ export default function AudioPlayer({ media }: Props) {
                     audio.currentTime = 0;
                     audio.play();
                 } else if (item) {
-                    // 切换到下一项，PlayerPage 会监听 currentIndex 变化自动加载
+                    // 切换到下一项，ViewPage 会监听 currentIndex 变化自动加载
                     usePlaylistStore.setState({ currentIndex: nextIdx });
                 }
             }
@@ -133,8 +136,27 @@ export default function AudioPlayer({ media }: Props) {
         };
     }, [media.id, media.mimeType]);
 
+    // 切歌（media 变化）后：显示占位直到音频可播放。
+    // 不查 readyState——换源后旧源的 readyState 残留会误判已就绪；canplay 是异步事件，加载期间占位保持
+    useEffect(() => {
+        setMediaReady(false);
+        const audio = audioRef.current;
+        if (!audio) return;
+        const onCanPlay = () => setMediaReady(true);
+        audio.addEventListener('canplay', onCanPlay);
+        return () => audio.removeEventListener('canplay', onCanPlay);
+    }, [media.id]);
+
+    // 切歌（media 变化）后：原生 audio 换 <source> 不会自动触发播放，需按设置手动恢复
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio || !autoPlayVideo) return;
+        audio.play().catch(() => { });
+    }, [media.id, autoPlayVideo]);
+
     return (
         <PlayerLayout media={media} mediaWrapperClass="audio-card">
+            {!mediaReady && <MediaLoading />}
             <div className="thumb-icon">🎵</div>
             <audio ref={audioRef} controls autoPlay preload="auto" className="audio-player">
                 <source src={streamUrl} type={media.mimeType} />

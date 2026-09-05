@@ -4,10 +4,12 @@ import { Api } from '../../api';
 import type { Media } from '../../types';
 import { usePlaylistStore } from '../../stores/playlist';
 import { usePlayerSettings } from '../../stores/playerSettings';
+import { useLatest } from '../../hooks/useLatest';
 import { useStreamToken } from '../../hooks/useStreamToken';
 import { resolveApiUrl } from '../../api';
 import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDEO_MAX_HEIGHT_RATIO, VIDEO_DRAG_SEEK_THRESHOLD, VIDEO_DOUBLE_CLICK_MS } from '../../config';
 import PlayerLayout from './PlayerLayout';
+import MediaLoading from '../feedback/MediaLoading';
 
 /** 进度浮层时间格式化（浏览器原生 Intl，UTC 基准）：0 秒显示 0:00、分钟不补前导零；支持 >=24h 不进位 */
 const seekTimeFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -41,7 +43,18 @@ export default function VideoPlayer({ media }: Props) {
     const playlist = usePlaylistStore();
     const playerSettings = usePlayerSettings();
     const videoRef = useRef<HTMLVideoElement>(null);
-    const playerRef = useRef<{ dispose: () => void } | null>(null);
+    // 换源用到的 video.js 实例方法（完整实例在初始化 effect 中赋值，兼容此最小接口）
+    const playerRef = useRef<{
+        dispose: () => void;
+        src: (source: { src: string; type: string }) => void;
+        currentTime: (t: number) => void;
+        one: (event: string, cb: () => void) => void;
+        play: () => Promise<any> | undefined;
+    } | null>(null);
+    // 最新 media 引用（video.js 初始化/事件闭包用，避免切歌后闭包过期）
+    const mediaRef = useLatest(media);
+    // 已换源的 media id（首帧由 <source> 提供，无需换源）
+    const lastMediaIdRef = useRef<string | null>(null);
     const autoPlayVideo = playerSettings.autoPlayVideo;
     const savedPlaybackRate = playerSettings.playbackRate;
     const savedVolume = playerSettings.volume;
@@ -49,6 +62,8 @@ export default function VideoPlayer({ media }: Props) {
     const { streamUrl } = useStreamToken(media.id, media.streamUrl);
     // 竖屏视频限制宽度（px），null 表示不限制
     const [portraitMaxWidth, setPortraitMaxWidth] = useState<number | null>(null);
+    // 媒体是否就绪（换源加载中显示占位；首帧由 video.js 自带 loading，不占位）
+    const [mediaReady, setMediaReady] = useState(true);
     // 视频画面拖动进度浮层（拖动 seek 时显示目标时间）
     const [seekOverlay, setSeekOverlay] = useState<{ current: number; duration: number } | null>(null);
 
@@ -89,7 +104,7 @@ export default function VideoPlayer({ media }: Props) {
 
                 async function refreshStream(): Promise<boolean> {
                     try {
-                        const data = await Api.refreshStreamToken(media.id);
+                        const data = await Api.refreshStreamToken(mediaRef.current.id);
                         if (disposed || !videoRef.current) return false;
                         const newUrl = resolveApiUrl(data.streamUrl);
                         const video = videoRef.current;
@@ -112,7 +127,7 @@ export default function VideoPlayer({ media }: Props) {
                     if (err.code !== 3 && await refreshStream()) return;
                     let errMsg: string;
                     switch (err.code) {
-                        case 4: errMsg = t('view.errorFormatUnsupported', { mimeType: media.mimeType }); break;
+                        case 4: errMsg = t('view.errorFormatUnsupported', { mimeType: mediaRef.current.mimeType }); break;
                         case 3: errMsg = t('view.errorDecodeFailed'); break;
                         case 2: errMsg = t('view.errorNetwork'); break;
                         default: errMsg = t('view.errorUnknown', { code: err.code, message: err.message || '' }); break;
@@ -166,12 +181,12 @@ export default function VideoPlayer({ media }: Props) {
                     const nextIdx = usePlaylistStore.getState().getNextIndex();
                     if (nextIdx >= 0) {
                         const item = usePlaylistStore.getState().queue[nextIdx];
-                        if (item && item.id === media.id) {
+                        if (item && item.id === mediaRef.current.id) {
                             // 单曲循环（repeatOne）：直接重播，无需重新串流
                             player.currentTime(0);
                             player.play();
                         } else if (item) {
-                            // 切换到下一项，PlayerPage 会监听 store 变化自动加载
+                            // 切换到下一项，ViewPage 会监听 store 变化自动加载
                             usePlaylistStore.setState({ currentIndex: nextIdx });
                         }
                     }
@@ -200,6 +215,38 @@ export default function VideoPlayer({ media }: Props) {
             }
         };
     }, []);
+
+    // media 变化 → 复用 video.js 实例换源（替代 key 重建，避免卸载重建的整页重载感）
+    useEffect(() => {
+        const currentId = mediaRef.current.id;
+        if (lastMediaIdRef.current === null) {
+            // 首帧：源由 <source> 元素提供，仅记录不换源
+            lastMediaIdRef.current = currentId;
+            return;
+        }
+        if (lastMediaIdRef.current === currentId) return;
+        const player = playerRef.current;
+        if (!player) return; // 初始化未完成（异常时序），跳过
+        // 用 media.streamUrl（同步 prop）而非 hook 的 streamUrl：后者是 state，media 变化后
+        // 本渲染闭包仍持旧 URL（useStreamToken 的 setState 异步生效），会导致换源加载错误媒体
+        const url = resolveApiUrl(media.streamUrl ?? '');
+        if (!url) return;
+        lastMediaIdRef.current = currentId;
+        setMediaReady(false);
+        player.src({ src: url, type: mediaRef.current.mimeType });
+        player.currentTime(0);
+        setSeekOverlay(null);
+        setPortraitMaxWidth(null);
+        // 新源就绪后隐藏占位。注意：不能查 readyState——player.src() 后立即查询返回的是旧源残留值，
+        // 会误判已就绪导致占位从不显示。loadeddata 是异步事件，慢加载期间占位保持，失败时 error 也会解除
+        const onLoaded = () => {
+            if (lastMediaIdRef.current !== mediaRef.current.id) return; // 已切到其他项
+            setMediaReady(true);
+        };
+        player.one('loadeddata', onLoaded);
+        player.one('error', onLoaded);
+        if (autoPlayVideo) player.play()?.catch(() => { });
+    }, [media.id]);
 
     // 键盘快捷键：无 Ctrl 时控制播放器（音量/快进快退/播放暂停）
     useEffect(() => {
@@ -346,6 +393,9 @@ export default function VideoPlayer({ media }: Props) {
 
     return (
         <PlayerLayout media={media} mediaWrapperStyle={portraitMaxWidth ? { maxWidth: portraitMaxWidth } : undefined}>
+            {/* 占位放 gesture-wrap 外层：video.js 会把 <video> 移入 .video-js 容器，
+                与 video 平级的兄弟会被 React/video.js 双重管理导致 insertBefore 报错 */}
+            {!mediaReady && <MediaLoading />}
             <div className="video-gesture-wrap">
                 <video ref={videoRef} className="video-js vjs-default-skin vjs-big-play-centered" controls autoPlay={autoPlayVideo} preload="auto">
                     <source src={streamUrl} type={media.mimeType} />
