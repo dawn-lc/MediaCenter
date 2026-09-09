@@ -21,7 +21,9 @@
 import crypto from 'crypto';
 import config from '../config';
 
-/** 与 JWT 密钥独立的签名密钥（通过哈希派生，避免密钥复用风险） */
+/**
+ * 与 JWT 密钥独立的签名密钥（通过哈希派生，避免密钥复用风险）
+ */
 const SIGNING_KEY = crypto
     .createHash('sha256')
     .update('url-signing:' + config.jwtSecret)

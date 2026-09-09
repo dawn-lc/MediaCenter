@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 
 interface Props {
     label: string;
-    /** 排序字段标识（与后端 sortBy 对应） */
+    /**
+     * 排序字段标识（与后端 sortBy 对应）
+     */
     sortKey: string;
     sortBy: string;
     sortOrder: 'asc' | 'desc';
@@ -11,7 +13,9 @@ interface Props {
     children?: ReactNode;
 }
 
-/** 可点击排序的表头（点击同列切换方向，点击新列切换字段） */
+/**
+ * 可点击排序的表头（点击同列切换方向，点击新列切换字段）
+ */
 export default function SortableTh({ label, sortKey, sortBy, sortOrder, onSort, className, children }: Props) {
     const active = sortBy === sortKey;
     return (

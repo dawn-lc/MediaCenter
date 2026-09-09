@@ -15,7 +15,9 @@ export interface EntityEntry {
     names: string[];
 }
 
-/** 词典文件路径: 优先 ENTITY_DICT_PATH, 默认容器挂载点 /config/entity-dict.json */
+/**
+ * 词典文件路径: 优先 ENTITY_DICT_PATH, 默认容器挂载点 /config/entity-dict.json
+ */
 function dictPath(): string {
     return process.env.ENTITY_DICT_PATH || '/config/entity-dict.json';
 }
@@ -71,7 +73,9 @@ export function ensureDictLoaded(): number {
     return _entries.length;
 }
 
-/** 从文本匹配词典实体, 返回该实体其他语言别名(去重, 排除已在文本中的; 自动热重载) */
+/**
+ * 从文本匹配词典实体, 返回该实体其他语言别名(去重, 排除已在文本中的; 自动热重载)
+ */
 export function matchDictAliases(text: string): string[] {
     ensureDictLoaded();
     if (!_dictRe || _nameToEntries.size === 0) return [];

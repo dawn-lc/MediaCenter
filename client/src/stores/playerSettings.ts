@@ -27,7 +27,7 @@ function scheduleSave(data: Omit<PlayerSettings, 'setStaticImageDuration' | 'set
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         } catch {
-            /* */
+            // ignore
         }
     }, DEBOUNCE_MS);
 }

@@ -11,7 +11,9 @@ import { DEBOUNCE_MS, SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM, PORTRAIT_VIDE
 import PlayerLayout from './PlayerLayout';
 import MediaLoading from '../feedback/MediaLoading';
 
-/** 进度浮层时间格式化（浏览器原生 Intl，UTC 基准）：0 秒显示 0:00、分钟不补前导零；支持 >=24h 不进位 */
+/**
+ * 进度浮层时间格式化（浏览器原生 Intl，UTC 基准）：0 秒显示 0:00、分钟不补前导零；支持 >=24h 不进位
+ */
 const seekTimeFormatter = new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
     hourCycle: 'h23',
@@ -317,7 +319,8 @@ export default function VideoPlayer({ media }: Props) {
                 active: false,
                 wasPlaying: !videoEl.paused
             };
-            try { videoEl.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+            try { videoEl.setPointerCapture(e.pointerId); } catch { // ignore
+            }
         };
 
         const onPointerMove = (e: PointerEvent) => {
@@ -341,7 +344,8 @@ export default function VideoPlayer({ media }: Props) {
             if (!dragState || e.pointerId !== dragState.pointerId) return;
             const { active, lastTime, wasPlaying } = dragState;
             dragState = null;
-            try { videoEl.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+            try { videoEl.releasePointerCapture(e.pointerId); } catch { // ignore
+            }
 
             if (active) {
                 // 拖拽 seek 结束

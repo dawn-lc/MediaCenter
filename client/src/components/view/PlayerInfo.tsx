@@ -26,7 +26,9 @@ function isExternalLink(href: string): boolean {
     }
 }
 
-/** 仅允许安全协议：http/https/mailto 或站内协议（相对路径）；拒绝 javascript:/data:/vbscript:/file: 等危险协议（防 XSS） */
+/**
+ * 仅允许安全协议：http/https/mailto 或站内协议（相对路径）；拒绝 javascript:/data:/vbscript:/file: 等危险协议（防 XSS）
+ */
 function isSafeLinkHref(href: string): boolean {
     try {
         const url = new URL(href, window.location.origin);
@@ -118,7 +120,9 @@ function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
 
 interface PlayerInfoProps {
     media: Media;
-    /** 额外的 meta 项，渲染在权限标签之后、上传者之前 */
+    /**
+     * 额外的 meta 项，渲染在权限标签之后、上传者之前
+     */
     metaExtra?: React.ReactNode;
 }
 

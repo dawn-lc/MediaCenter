@@ -1,6 +1,4 @@
-/* ============================================
-   表格 & 分页
-   ============================================ */
+/* 表格 & 分页 */
 
 .table-wrapper {
     overflow-x: auto;
@@ -40,7 +38,6 @@ table th {
     letter-spacing: 0.5px;
 }
 
-/* ========== 可排序表头 ========== */
 .col-sortable {
     cursor: pointer;
     user-select: none;
@@ -64,7 +61,6 @@ table tr:hover td {
     background: var(--bg-input);
 }
 
-/* ========== 行内编辑 ========== */
 table tr.row-editing td {
     background: rgba(108, 92, 231, 0.05);
 }
@@ -75,7 +71,6 @@ table tr.row-editing .form-textarea {
     padding: 8px 10px;
 }
 
-/* ========== 列宽辅助类 ========== */
 .col-name {
     width: 20%;
 }
@@ -116,7 +111,6 @@ table tr.row-editing .form-textarea {
     text-decoration: underline;
 }
 
-/* ========== 表格中的文本溢出 ========== */
 .text-cell {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -127,7 +121,6 @@ table tr.row-editing .form-textarea {
     line-height: 1.5;
 }
 
-/* ========== 链接单元格样式 ========== */
 .url-cell {
     display: flex;
     flex-wrap: wrap;
@@ -153,7 +146,6 @@ table tr.row-editing .form-textarea {
     color: var(--text-primary);
 }
 
-/* ========== 分页 ========== */
 .pagination {
     display: flex;
     align-items: center;

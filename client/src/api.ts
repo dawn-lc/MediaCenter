@@ -5,11 +5,17 @@ import { ApiError } from './apiError';
 
 const AUTH_STORAGE_KEY = STORAGE_PREFIX + 'auth';
 
-/** 令牌失效事件（auth store 监听并重置登录态，避免重复弹提示） */
+/**
+ * 令牌失效事件（auth store 监听并重置登录态，避免重复弹提示）
+ */
 export const SESSION_EXPIRED_EVENT = 'mediacenter:session-expired';
-/** 令牌静默续期成功事件（auth store 监听更新 access token，SSE 等依赖 token 的连接随之重建） */
+/**
+ * 令牌静默续期成功事件（auth store 监听更新 access token，SSE 等依赖 token 的连接随之重建）
+ */
 export const TOKEN_REFRESHED_EVENT = 'mediacenter:token-refreshed';
-/** refreshToken 持久化 key（记住登录） */
+/**
+ * refreshToken 持久化 key（记住登录）
+ */
 export const AUTH_REFRESH_STORAGE_KEY = STORAGE_PREFIX + 'auth_refresh';
 
 /**
@@ -19,12 +25,16 @@ export const AUTH_REFRESH_STORAGE_KEY = STORAGE_PREFIX + 'auth_refresh';
  */
 const API_BASE = import.meta.env.VITE_API_BASE ? String(import.meta.env.VITE_API_BASE).replace(/\/+$/, '') + '/api' : '/api';
 
-/** 获取 API 完整 URL */
+/**
+ * 获取 API 完整 URL
+ */
 export function apiUrl(path: string): string {
     return API_BASE.startsWith('/') ? API_BASE + path : new URL(API_BASE + path).href;
 }
 
-/** API 基础域名（不含 /api 路径），用于将相对 URL 转为绝对地址 */
+/**
+ * API 基础域名（不含 /api 路径），用于将相对 URL 转为绝对地址
+ */
 const API_HOST = import.meta.env.VITE_API_BASE ? new URL(String(import.meta.env.VITE_API_BASE).replace(/\/+$/, '')).href.replace(/\/$/, '') : '';
 
 /**
@@ -39,7 +49,9 @@ export function resolveApiUrl(path: string | null | undefined): string {
     return new URL(API_HOST + path).href;
 }
 
-/** 从 localStorage 读取 token（和 auth store 使用相同 key） */
+/**
+ * 从 localStorage 读取 token（和 auth store 使用相同 key）
+ */
 function getToken(): string | null {
     try {
         const saved = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -52,15 +64,19 @@ function getToken(): string | null {
             return saved; // 纯字符串 token
         }
     } catch {
-        /* ignore */
+        // ignore
     }
     return null;
 }
 
-/** 正在进行的刷新请求（并发 401 只刷一次） */
+/**
+ * 正在进行的刷新请求（并发 401 只刷一次）
+ */
 let refreshPromise: Promise<boolean> | null = null;
 
-/** 用 refreshToken 静默续期：成功后写入新令牌并通知 auth store，返回是否成功 */
+/**
+ * 用 refreshToken 静默续期：成功后写入新令牌并通知 auth store，返回是否成功
+ */
 async function tryRefreshToken(): Promise<boolean> {
     if (!refreshPromise) {
         refreshPromise = doRefreshToken().finally(() => {
@@ -126,7 +142,7 @@ async function request<T>(method: string, path: string, body?: unknown, isFormDa
                 localStorage.removeItem(AUTH_STORAGE_KEY);
                 localStorage.removeItem(AUTH_REFRESH_STORAGE_KEY);
             } catch {
-                /* ignore */
+                // ignore
             }
             window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
             throw new ApiError(i18n.t('auth.sessionExpired'), 401, true);
@@ -159,7 +175,9 @@ export const Api = {
         });
     },
 
-    /** 登出：撤销该用户所有 refresh token（失败由调用方静默处理） */
+    /**
+     * 登出：撤销该用户所有 refresh token（失败由调用方静默处理）
+     */
     logout() {
         return request<{ message: string }>('POST', '/auth/logout');
     },
@@ -168,17 +186,23 @@ export const Api = {
         return request<{ user: import('./types').User }>('GET', '/auth/profile');
     },
 
-    /** 公开用户主页信息（需登录）：用户信息 + 按当前用户可见范围的媒体统计 */
+    /**
+     * 公开用户主页信息（需登录）：用户信息 + 按当前用户可见范围的媒体统计
+     */
     getUser(id: string) {
         return request<{ user: import('./types').User; stats: import('./types').PublicUserStats }>('GET', `/users/${encodeURIComponent(id)}`);
     },
 
-    /** 公开作者主页信息：作者信息 + 按当前用户可见范围的媒体统计 */
+    /**
+     * 公开作者主页信息：作者信息 + 按当前用户可见范围的媒体统计
+     */
     getAuthor(id: string) {
         return request<{ author: import('./types').Author; stats: import('./types').PublicAuthorStats }>('GET', `/authors/${encodeURIComponent(id)}`);
     },
 
-    /** 修改密码：验证旧密码，成功后撤销当前用户全部 refresh token */
+    /**
+     * 修改密码：验证旧密码，成功后撤销当前用户全部 refresh token
+     */
     changePassword(data: { oldPassword: string; newPassword: string }) {
         return request<{ message: string }>('POST', '/auth/change-password', data);
     },
@@ -216,7 +240,9 @@ export const Api = {
         return request<{ media: Media }>('GET', `/media/${id}`);
     },
 
-    /** 首页概览统计（媒体总数/类型/总大小/标签/作者/最近上传） */
+    /**
+     * 首页概览统计（媒体总数/类型/总大小/标签/作者/最近上传）
+     */
     getStats() {
         return request<StatsResponse>('GET', '/media/stats');
     },
@@ -308,7 +334,9 @@ export const Api = {
         return request<{ message: string }>('PUT', `/admin/users/${userId}/role`, { role });
     },
 
-    /** 管理员创建用户（注册关闭时也可手动添加） */
+    /**
+     * 管理员创建用户（注册关闭时也可手动添加）
+     */
     createUser(data: { username: string; password: string; role?: string }) {
         return request<{ message: string; user: import('./types').User }>('POST', '/admin/users', data);
     },

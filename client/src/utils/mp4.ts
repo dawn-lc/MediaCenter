@@ -13,7 +13,9 @@ import { createLogger } from './log';
 
 // ── 原子层 ──
 
-/** 读取 atom 头部，返回 { type, dataStart, dataEnd }，无匹配时返回 null */
+/**
+ * 读取 atom 头部，返回 { type, dataStart, dataEnd }，无匹配时返回 null
+ */
 export function readAtomHeader(
     buf: ArrayBuffer, offset: number,
 ): { type: string; dataStart: number; dataEnd: number } | null {
@@ -94,10 +96,14 @@ export function findAtomScan(
     return null;
 }
 
-/** 兼容别名：findAtom 默认用精确原子树查找 */
+/**
+ * 兼容别名：findAtom 默认用精确原子树查找
+ */
 export const findAtom = findAtomIn;
 
-/** 收集指定名称的所有同级 atom（已在同一层级遍历，不递归） */
+/**
+ * 收集指定名称的所有同级 atom（已在同一层级遍历，不递归）
+ */
 function collectSiblings(
     buf: ArrayBuffer, start: number, end: number,
 ): { type: string; dataStart: number; dataEnd: number }[] {
@@ -123,7 +129,9 @@ function readFlags(buf: ArrayBuffer, start: number): number {
 
 // ── stbl 层解析 ──
 
-/** 从视频轨道的 stbl 中提取首帧信息 */
+/**
+ * 从视频轨道的 stbl 中提取首帧信息
+ */
 function parseStbl(stblData: ArrayBuffer): { offset: number; size: number } | null {
     const log = createLogger('mp4');
     let stco: ArrayBuffer | null = null;
@@ -186,7 +194,9 @@ function parseStbl(stblData: ArrayBuffer): { offset: number; size: number } | nu
 
 // ── trak 层 ──
 
-/** 判断一个 trak 是否为视频轨道，是则返回其 stbl 数据 */
+/**
+ * 判断一个 trak 是否为视频轨道，是则返回其 stbl 数据
+ */
 function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
     const log = createLogger('mp4');
     // 找 hdlr → 判断 track 类型
@@ -214,14 +224,18 @@ function extractVideoStbl(trakData: ArrayBuffer): ArrayBuffer | null {
     return trimAtomHeader(stbl);
 }
 
-/** 去掉 atom 的 8 字节头部，返回纯数据区 */
+/**
+ * 去掉 atom 的 8 字节头部，返回纯数据区
+ */
 function trimAtomHeader(atom: ArrayBuffer): ArrayBuffer {
     return atom.byteLength > 8 ? atom.slice(8) : atom;
 }
 
 // ── 样本索引（用于按时间定位帧数据的字节偏移）──
 
-/** 从完整 moov 中提取视频轨道的 stbl 数据（已去除 stbl 自身头部） */
+/**
+ * 从完整 moov 中提取视频轨道的 stbl 数据（已去除 stbl 自身头部）
+ */
 export function getVideoStbl(moovBuffer: ArrayBuffer): ArrayBuffer | null {
     let pos = 8;
     while (pos + 8 <= moovBuffer.byteLength) {
@@ -237,7 +251,9 @@ export function getVideoStbl(moovBuffer: ArrayBuffer): ArrayBuffer | null {
     return null;
 }
 
-/** 视频样本索引，用于根据样本号定位原始文件中的字节偏移 */
+/**
+ * 视频样本索引，用于根据样本号定位原始文件中的字节偏移
+ */
 export interface SampleIndex {
     chunkOffsets: number[];    // chunkOffsets[c] = 第 c 个 chunk 的文件字节偏移
     sampleSizes: number[];     // sampleSizes[s] = 第 s 个 sample 的字节大小
@@ -245,7 +261,9 @@ export interface SampleIndex {
     totalSamples: number;
 }
 
-/** 从 stbl 数据构建样本索引 */
+/**
+ * 从 stbl 数据构建样本索引
+ */
 export function buildSampleIndex(stblData: ArrayBuffer): SampleIndex | null {
     const log = createLogger('mp4');
     let stco: ArrayBuffer | null = null;
@@ -309,7 +327,9 @@ export function buildSampleIndex(stblData: ArrayBuffer): SampleIndex | null {
     return { chunkOffsets, sampleSizes, stsc: stscEntries, totalSamples };
 }
 
-/** 根据样本号获取其在原始文件中的字节偏移（若超出范围返回 null） */
+/**
+ * 根据样本号获取其在原始文件中的字节偏移（若超出范围返回 null）
+ */
 export function getSampleByteOffset(index: SampleIndex, sampleNum: number): number | null {
     if (sampleNum < 0 || sampleNum >= index.totalSamples) return null;
 
@@ -381,7 +401,9 @@ export function getByteRangeForSamples(
 
 // ── 公开 API ──
 
-/** 从 moov atom 的完整数据中解析首个视频帧的字节偏移和大小 */
+/**
+ * 从 moov atom 的完整数据中解析首个视频帧的字节偏移和大小
+ */
 export function parseFirstVideoFrame(
     moovBuffer: ArrayBuffer,
 ): { offset: number; size: number } | null {

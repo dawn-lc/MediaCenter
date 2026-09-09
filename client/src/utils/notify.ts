@@ -13,24 +13,36 @@ import { ApiError } from '../apiError';
 
 export type ToastOptions = ExternalToast;
 
-/** error() 的展示选项：fallback 为兜底文案，其余透传给 toast */
+/**
+ * error() 的展示选项：fallback 为兜底文案，其余透传给 toast
+ */
 export interface ErrorToastOptions extends ToastOptions {
-    /** 兜底文案：err 既不是 Error 也不是字符串时使用 */
+    /**
+     * 兜底文案：err 既不是 Error 也不是字符串时使用
+     */
     fallback?: string;
 }
 
 interface PromiseToastOptions<T> {
-    /** loading 提示文案（可省略，省略则无 loading toast） */
+    /**
+     * loading 提示文案（可省略，省略则无 loading toast）
+     */
     loading?: string;
-    /** 成功提示文案，或根据返回数据动态生成 */
+    /**
+     * 成功提示文案，或根据返回数据动态生成
+     */
     success?: string | ((data: T) => string | void);
-    /** 成功后的副作用（导航、刷新列表等），仅在成功时执行 */
+    /**
+     * 成功后的副作用（导航、刷新列表等），仅在成功时执行
+     */
     onSuccess?: (data: T) => void;
     toastOptions?: ToastOptions;
 }
 
 export const notify = {
-    /** 成功提示 */
+    /**
+     * 成功提示
+     */
     success(message: string, opts?: ToastOptions): void {
         toast.success(message, { duration: TOAST_DURATION, ...opts });
     },
@@ -73,7 +85,9 @@ export const notify = {
         }
     },
 
-    /** 数据加载：失败自动提示（会话过期静默），返回 undefined */
+    /**
+     * 数据加载：失败自动提示（会话过期静默），返回 undefined
+     */
     async run<T>(fn: () => Promise<T>): Promise<T | undefined> {
         try {
             return await fn();

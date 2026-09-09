@@ -13,7 +13,9 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { useAdminTableState } from '../../hooks/useAdminTableState';
 import { ADMIN_PAGE_SIZE } from '../../config';
 
-/** 行内编辑中的行状态 */
+/**
+ * 行内编辑中的行状态
+ */
 interface EditingRow {
     id: string;
     altNames: string;

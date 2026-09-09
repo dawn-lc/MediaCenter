@@ -52,7 +52,7 @@ function getSavedLang(): string {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored && SUPPORTED_LANGS.includes(stored)) return stored;
     } catch {
-        /* ignore */
+        // ignore
     }
     if (typeof navigator !== 'undefined' && navigator.language) {
         return mapBrowserLang(navigator.language);
@@ -81,7 +81,7 @@ export function changeLanguage(lang: string) {
     try {
         localStorage.setItem(STORAGE_KEY, lang);
     } catch {
-        /* ignore */
+        // ignore
     }
     i18n.changeLanguage(lang);
 }

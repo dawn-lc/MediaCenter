@@ -9,13 +9,17 @@ const STORAGE_KEY = STORAGE_PREFIX + 'theme';
 const media: MediaQueryList | null =
     typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: light)') : null;
 
-/** system 时按系统实际偏好解析，否则取显式偏好 */
+/**
+ * system 时按系统实际偏好解析，否则取显式偏好
+ */
 export function resolveEffective(pref: ThemePref): EffectiveTheme {
     if (pref === 'system') return media && media.matches ? 'light' : 'dark';
     return pref;
 }
 
-/** 把有效主题写到 <html data-theme> 并同步 store 的 effective（实际生效主题） */
+/**
+ * 把有效主题写到 <html data-theme> 并同步 store 的 effective（实际生效主题）
+ */
 export function applyTheme(pref: ThemePref) {
     const effective = resolveEffective(pref);
     if (typeof document !== 'undefined') {
@@ -29,14 +33,16 @@ export function loadPref(): ThemePref {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
     } catch {
-        /* */
+        // ignore
     }
     return 'system';
 }
 
 interface ThemeState {
     pref: ThemePref;
-    /** 实际生效的主题（跟随系统时随系统变化） */
+    /**
+     * 实际生效的主题（跟随系统时随系统变化）
+     */
     effective: EffectiveTheme;
     setPref(pref: ThemePref): void;
 }
@@ -51,7 +57,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
         try {
             localStorage.setItem(STORAGE_KEY, pref);
         } catch {
-            /* */
+            // ignore
         }
         applyTheme(pref);
     },

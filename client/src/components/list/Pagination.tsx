@@ -7,7 +7,9 @@ interface Props {
     onPageChange: (page: number) => void;
 }
 
-/** 移动端断点：与 responsive.css 保持一致 */
+/**
+ * 移动端断点：与 responsive.css 保持一致
+ */
 const COMPACT_MQ = '(max-width: 768px)';
 
 /**

@@ -17,7 +17,9 @@ export function computeFileHash(filePath: string): Promise<string> {
     });
 }
 
-/** scrypt 参数（与 OWASP 推荐一致） */
+/**
+ * scrypt 参数（与 OWASP 推荐一致）
+ */
 const SCRYPTOPTIONS = { N: 16384, r: 8, p: 1 };
 const KEY_LENGTH = 64;
 

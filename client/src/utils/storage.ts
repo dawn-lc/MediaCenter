@@ -2,7 +2,9 @@
 // 持久化存储申请 —— 确保缩略图缓存不被浏览器清理
 // ---------------------------------------------------------------------------
 
-/** 申请持久化存储权限，仅在需要时调用一次 */
+/**
+ * 申请持久化存储权限，仅在需要时调用一次
+ */
 export async function requestPersistentStorage(): Promise<boolean> {
     // 不支持 persist API 的环境直接返回
     if (!navigator.storage?.persist) return false;

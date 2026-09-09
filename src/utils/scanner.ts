@@ -22,7 +22,9 @@ export interface ScanResult {
 export interface ScanOptions {
     recursive?: boolean;
     uploaderId: string;
-    /** 扫描触发者 id（SSE 不推回给触发者本人） */
+    /**
+     * 扫描触发者 id（SSE 不推回给触发者本人）
+     */
     actorId?: string | null;
 }
 

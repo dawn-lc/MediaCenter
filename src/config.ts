@@ -63,7 +63,9 @@ const config = {
     jwtExpiresIn: '7d' as const,
     apiToken: process.env.API_TOKEN, // 静态 API 令牌，不设置则禁用
     databaseUrl: process.env.DATABASE_URL!,
-    /** 数据库连接池上限（默认 16，单容器实例建议 8~16） */
+    /**
+     * 数据库连接池上限（默认 16，单容器实例建议 8~16）
+     */
     dbPoolSize: parseInt(process.env.DB_POOL_SIZE || '16', 10),
     /**
      * 语义搜索开关：通用 OpenAI 兼容嵌入接口（POST {base}/embeddings）。
@@ -71,7 +73,9 @@ const config = {
      * 兼容任意 OpenAI 兼容服务：Ollama(http://host:11434/v1)、OpenAI、vLLM、LM Studio 等。
      */
     embeddingBaseUrl: process.env.EMBEDDING_BASE_URL || null,
-    /** 嵌入模型名 */
+    /**
+     * 嵌入模型名
+     */
     embeddingModel: process.env.EMBEDDING_MODEL || 'qwen3-embedding:0.6b',
     /**
      * 嵌入输出维度(默认 1024, 与 media.embedding vector(1024) 一致)。
@@ -80,9 +84,13 @@ const config = {
      * 设为 0 则不做截断(全维度), 需自行保证与 schema 维度一致。
      */
     embeddingDim: parseInt(process.env.EMBEDDING_DIM || '1024', 10),
-    /** 可选 API Key（OpenAI 等需要鉴权的服务） */
+    /**
+     * 可选 API Key（OpenAI 等需要鉴权的服务）
+     */
     embeddingApiKey: process.env.EMBEDDING_API_KEY || null,
-    /** 语义搜索动态阈值下限保护(默认 0.3): 实际阈值 = max(mean+σ*k, 该值), 统计规律自适应 */
+    /**
+     * 语义搜索动态阈值下限保护(默认 0.3): 实际阈值 = max(mean+σ*k, 该值), 统计规律自适应
+     */
     semanticMinRelevance: parseFloat(process.env.SEMANTIC_MIN_RELEVANCE || '0.3'),
     /** 语义搜索动态阈值 σ 倍数 k(默认 2.5): 实际阈值 = mean + σ*k, 夹在 [下限, 0.9*max]。
      *  分层采样实测: 2σ 对实体词过松(total 虚高、深层次污染), 3σ 对泛词(如 MMD, σ 大)过度收敛,
@@ -95,13 +103,21 @@ const config = {
     rrfK: parseInt(process.env.RRF_K || '60', 10),
     uploadDir: resolve(process.cwd(), process.env.UPLOAD_DIR!),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '34359738368', 10), // 32GB
-    /** 服务端缩略图生成开关（默认关闭；开启后 updateMedia 时用 ffmpeg 生成，前端生成兜底） */
+    /**
+     * 服务端缩略图生成开关（默认关闭；开启后 updateMedia 时用 ffmpeg 生成，前端生成兜底）
+     */
     serverThumbnails: process.env.SERVER_THUMBNAILS === 'true',
-    /** 缩略图存储子目录（相对 UPLOAD_DIR） */
+    /**
+     * 缩略图存储子目录（相对 UPLOAD_DIR）
+     */
     thumbSubdir: '.thumbnails',
-    /** 缩略图宽度（与前端客户端生成的 380 一致） */
+    /**
+     * 缩略图宽度（与前端客户端生成的 380 一致）
+     */
     thumbWidth: 380,
-    /** ffmpeg 生成缩略图超时（毫秒） */
+    /**
+     * ffmpeg 生成缩略图超时（毫秒）
+     */
     thumbTimeoutMs: 30_000,
 
     // 支持的媒体类型
@@ -128,24 +144,38 @@ const config = {
 
     // ── 注册与账号安全 ──
 
-    /** 是否开放自助注册（默认关闭；需显式设置 ALLOW_REGISTRATION=true） */
+    /**
+     * 是否开放自助注册（默认关闭；需显式设置 ALLOW_REGISTRATION=true）
+     */
     allowRegistration: process.env.ALLOW_REGISTRATION === 'true',
-    /** 注册密码最小长度（默认 8） */
+    /**
+     * 注册密码最小长度（默认 8）
+     */
     minPasswordLength: parseInt(process.env.MIN_PASSWORD_LENGTH || '8', 10),
 
     // ── 业务常量 ──
 
-    /** 标题最大长度（常见文件系统最大文件名 255 字节） */
+    /**
+     * 标题最大长度（常见文件系统最大文件名 255 字节）
+     */
     maxTitleLength: 255,
-    /** 描述最大长度 */
+    /**
+     * 描述最大长度
+     */
     maxDescLength: 16 * 1024 * 1024,
 
-    /** 签名 URL 默认过期秒数 */
+    /**
+     * 签名 URL 默认过期秒数
+     */
     defaultExpiresSeconds: 3 * 60,
 
-    /** 标签表达式最大长度 */
+    /**
+     * 标签表达式最大长度
+     */
     maxExprLength: 512,
-    /** 标签表达式最大递归深度 */
+    /**
+     * 标签表达式最大递归深度
+     */
     maxDepth: 32,
 
 } as const;

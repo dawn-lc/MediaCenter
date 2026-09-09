@@ -1,6 +1,4 @@
-/* ============================================
-   个人中心（Profile）
-   ============================================ */
+/* 个人中心（Profile） */
 
 .profile-fields {
     display: flex;
@@ -69,8 +67,7 @@
 }
 
 /* 开关（toggle switch） */
-/* .settings-row label 的 flex:1 会拉伸开关 label（0,1,1 > .switch 的 flex:none 0,1,0），
-   导致隐形点击区占满整行 —— 需更高特异性覆盖为不拉伸 */
+/* .settings-row label 的 flex:1 会拉伸开关 label（0,1,1 > .switch 的 flex:none 0,1,0），导致隐形点击区占满整行，需更高特异性覆盖为不拉伸 */
 .settings-row label.switch {
     flex: none;
     margin: 0;

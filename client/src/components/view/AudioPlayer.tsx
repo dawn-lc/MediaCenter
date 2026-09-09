@@ -120,7 +120,7 @@ export default function AudioPlayer({ media }: Props) {
                     { once: true }
                 );
             } catch {
-                /* 刷新失败继续用旧源 */
+                // 刷新失败继续用旧源
             }
         };
         const onSeeked = () => {

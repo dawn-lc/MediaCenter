@@ -189,28 +189,57 @@ async function ensureRefreshTokenCleanup(): Promise<void> {
 }
 
 /**
+ * 动态发现数据库中的扩展对象（属于 pg_extension 的表/视图/物化视图）
+ *
+ * 背景：pushSchema 的"全量对齐"语义会把库中不属于 schema.ts 的对象生成 DROP。
+ * 而扩展创建的对象（如 pg_stat_statements 的视图）在 pg_class 里就是普通视图，
+ * drizzle introspect 无法区分 → 误判为"schema 中不存在" → 生成 DROP VIEW。
+ *
+ * 通过 pg_depend 查询对象与扩展的归属关系（deptype='e'），自动发现并返回
+ * pushSchema tables 过滤器可用的排除名单（如 "!pg_stat_statements"）。
+ */
+async function discoverExtensionObjects(dbInstance: ReturnType<typeof drizzle>): Promise<string[]> {
+    try {
+        const result = await dbInstance.execute(
+            sql`SELECT c.relname AS name
+                FROM pg_depend d
+                JOIN pg_class c ON d.objid = c.oid
+                JOIN pg_extension e ON d.refobjid = e.oid
+                WHERE d.deptype = 'e'
+                    AND c.relnamespace = 'public'::regnamespace
+                    AND c.relkind IN ('r','v','m')`
+        );
+        return result.rows.map((r) => `!${String(r.name)}`);
+    } catch (err: unknown) {
+        console.warn('[DB] 发现扩展对象失败（回退为不排除）:', err instanceof Error ? err.message : err);
+        return [];
+    }
+}
+
+/**
  * 内部同步表结构（根据 schema.ts 自动执行 drizzle-kit pushSchema）
  */
 export async function syncSchemaInternal(dbInstance: ReturnType<typeof drizzle>): Promise<void> {
     try {
         const { pushSchema } = await import('drizzle-kit/api-postgres');
+        // 自动排除扩展对象（如 pg_stat_statements 视图），避免 pushSchema 误判生成 DROP
+        const extExcludes = await discoverExtensionObjects(dbInstance);
         const result = await pushSchema(
             schema,
             dbInstance,
-            { schemas: ['public'], tables: [], entities: undefined, extensions: [] },
+            { schemas: ['public'], tables: extExcludes, entities: undefined, extensions: [] },
         );
         for (const hint of result.hints || []) {
             console.warn('[DB] ' + hint.hint);
         }
         if (result.sqlStatements?.length) {
-            // 过滤破坏性语句(DROP VIEW/DROP TABLE 等): pushSchema 会把库中共享对象
-            // (如 pg_stat_statements 扩展视图)当成"schema 中不存在"而生成 DROP,
-            // apply 按序执行时会因 DROP 失败中断, 导致后续 ADD COLUMN 等变更未执行。
-            // 只执行非破坏性语句(ADD COLUMN / CREATE TABLE / CREATE INDEX 等), 保守安全。
-            const dropped = result.sqlStatements.filter((s) => /^\s*DROP\b/i.test(s));
-            const safe = result.sqlStatements.filter((s) => !/^\s*DROP\b/i.test(s));
-            if (dropped.length) {
-                console.warn('[DB] 跳过破坏性语句(不执行):', dropped);
+            // 拦截仅限"数据级破坏"的语句(DROP TABLE / DROP SCHEMA / TRUNCATE): 涉及数据丢失且不可自动恢复,
+            // 即使 schema.ts 移除了某表也应人工确认后手动清理, 防止误同步导致生产数据灾难。
+            // 其余语句(DROP INDEX / DROP VIEW / ALTER / CREATE 等)全部自动执行 —— 目标: 部署零人工介入。
+            const dataDestructive = result.sqlStatements.filter((s) => /^\s*(DROP\s+(TABLE|SCHEMA)|TRUNCATE)\b/i.test(s));
+            const safe = result.sqlStatements.filter((s) => !/^\s*(DROP\s+(TABLE|SCHEMA)|TRUNCATE)\b/i.test(s));
+            if (dataDestructive.length) {
+                console.warn('[DB] 跳过数据级破坏性语句(不执行, 请人工确认后手动清理):', dataDestructive);
             }
             for (const stmt of safe) {
                 await dbInstance.execute(sql.raw(stmt));
@@ -260,9 +289,13 @@ export async function ensureDefaultUsers(): Promise<void> {
     console.log(`[DB] 管理员账号已创建: ${admin.username}`);
 }
 
-/** API 服务账户的保留用户名（静态 API 令牌对应的系统账号，不可密码登录） */
+/**
+ * API 服务账户的保留用户名（静态 API 令牌对应的系统账号，不可密码登录）
+ */
 export const API_USERNAME = 'api';
-/** API 服务账户的用户 id（启动时创建/解析后填充，供 auth 中间件映射） */
+/**
+ * API 服务账户的用户 id（启动时创建/解析后填充，供 auth 中间件映射）
+ */
 export let apiUserId: string | null = null;
 
 /**
@@ -295,22 +328,30 @@ export async function ensureApiUser(): Promise<string> {
     return id;
 }
 
-/** pg_trgm 相似度函数：similarity(column, 'keyword') */
+/**
+ * pg_trgm 相似度函数：similarity(column, 'keyword')
+ */
 export function similarity(column: any, value: string): SQL {
     return sql`similarity(${column}, ${value})`;
 }
 
-/** pg_bigm 2-gram 相似度函数(东亚文字友好, 2 字词优于 trgm)：bigm_similarity(column, 'keyword') */
+/**
+ * pg_bigm 2-gram 相似度函数(东亚文字友好, 2 字词优于 trgm)：bigm_similarity(column, 'keyword')
+ */
 export function bigmSimilarity(column: any, value: string): SQL {
     return sql`bigm_similarity(${column}, ${value})`;
 }
 
-/** PostgreSQL 当前时间戳（SQL 标准，时区感知） */
+/**
+ * PostgreSQL 当前时间戳（SQL 标准，时区感知）
+ */
 export function currentTimestamp(): SQL {
     return sql`CURRENT_TIMESTAMP`;
 }
 
-/** PostgreSQL 时区间隔：CURRENT_TIMESTAMP + N * INTERVAL '1 day' */
+/**
+ * PostgreSQL 时区间隔：CURRENT_TIMESTAMP + N * INTERVAL '1 day'
+ */
 export function intervalDays(days: number): SQL {
     return sql`CURRENT_TIMESTAMP + ${days} * INTERVAL '1 day'`;
 }

@@ -138,11 +138,11 @@ export default function PlayerControls({ media, countdown = 0 }: Props) {
         <>
             <div className="player-controls">
                 <div className="player-controls-left">
-                    <button className="btn btn-secondary btn-sm" disabled={!hasPrev} onClick={goPrev}>
-                        {t('view.prev')}
-                    </button>
                     <button className="btn btn-secondary btn-sm" disabled={!hasNext} onClick={goNext}>
                         {t('view.next')}
+                    </button>
+                    <button className="btn btn-secondary btn-sm" disabled={!hasPrev} onClick={goPrev}>
+                        {t('view.prev')}
                     </button>
                     {getMediaType(media.mimeType) === 'image' && (
                         <button className="btn btn-secondary btn-sm" onClick={openDurationEdit} title={t('view.setPlayDuration')}>

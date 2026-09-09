@@ -15,7 +15,9 @@ import { useAdminTableState } from '../../hooks/useAdminTableState';
 import { isValidHttpUrl } from '../../utils';
 import { ADMIN_PAGE_SIZE } from '../../config';
 
-/** 行内编辑中的行状态 */
+/**
+ * 行内编辑中的行状态
+ */
 interface EditingRow {
     id: string;
     name: string;

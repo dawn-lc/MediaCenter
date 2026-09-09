@@ -5,7 +5,9 @@
 import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
 
-/** 管理员跳过限流 */
+/**
+ * 管理员跳过限流
+ */
 function skipIfAdmin(req: Request): boolean {
     return req.user?.role === 'admin';
 }

@@ -6,7 +6,9 @@ export class ApiError extends Error {
     constructor(
         message: string,
         public status: number,
-        /** 会话已过期（令牌失效），已由全局统一提示，调用方应静默 */
+        /**
+         * 会话已过期（令牌失效），已由全局统一提示，调用方应静默
+         */
         public isAuthExpired = false
     ) {
         super(message);

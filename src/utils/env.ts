@@ -5,27 +5,49 @@ declare global {
         isEmpty(): boolean;
     }
     interface Array<T> {
-        /** 数组去重。无参数时按值去重，传 prop 时按对象属性去重 */
+        /**
+         * 数组去重。无参数时按值去重，传 prop 时按对象属性去重
+         */
         unique(prop?: keyof T): T[];
-        /** 并集：A ∪ B */
+        /**
+         * 并集：A ∪ B
+         */
         union(that: T[], prop?: keyof T): T[];
-        /** 交集：A ∩ B */
+        /**
+         * 交集：A ∩ B
+         */
         intersect(that: T[], prop?: keyof T): T[];
-        /** 差集：A \\ B（A 中有而 B 中没有的） */
+        /**
+         * 差集：A \\ B（A 中有而 B 中没有的）
+         */
         difference(that: T[], prop?: keyof T): T[];
-        /** 相对补集：B \\ A（B 中有而 A 中没有的） */
+        /**
+         * 相对补集：B \\ A（B 中有而 A 中没有的）
+         */
         complement(that: T[], prop?: keyof T): T[];
-        /** 对称差集：A △ B（两边不同时有的元素） */
+        /**
+         * 对称差集：A △ B（两边不同时有的元素）
+         */
         symmetricDifference(that: T[], prop?: keyof T): T[];
-        /** 子集判断：A ⊆ B */
+        /**
+         * 子集判断：A ⊆ B
+         */
         isSubsetOf(that: T[], prop?: keyof T): boolean;
-        /** 超集判断：A ⊇ B */
+        /**
+         * 超集判断：A ⊇ B
+         */
         isSupersetOf(that: T[], prop?: keyof T): boolean;
-        /** 真子集：A ⊂ B（A ⊆ B 且 A ≠ B） */
+        /**
+         * 真子集：A ⊂ B（A ⊆ B 且 A ≠ B）
+         */
         isProperSubsetOf(that: T[], prop?: keyof T): boolean;
-        /** 真超集：A ⊃ B（A ⊇ B 且 A ≠ B） */
+        /**
+         * 真超集：A ⊃ B（A ⊇ B 且 A ≠ B）
+         */
         isProperSupersetOf(that: T[], prop?: keyof T): boolean;
-        /** 笛卡尔积：A × B（所有有序对） */
+        /**
+         * 笛卡尔积：A × B（所有有序对）
+         */
         cartesianProduct<U>(that: U[]): [T, U][];
     }
 }
@@ -141,14 +163,20 @@ export function prune<T>(data: T): Pruned<T> {
     }
     return data as Pruned<T>;
 }
-/** Type guard that always returns true — for use with pick() when any non-undefined value is acceptable */
+/**
+ * Type guard that always returns true — for use with pick() when any non-undefined value is acceptable
+ */
 export const isPresent = <T = unknown>(_v: unknown): _v is T => true;
 
-/** Safely convert to number, returning null for nullish values */
+/**
+ * Safely convert to number, returning null for nullish values
+ */
 export const toNumberOrNull = (v: unknown): number | null =>
     isNullOrUndefined(v) ? null : Number(v);
 
-/** Safely convert to string, returning null for non-string values */
+/**
+ * Safely convert to string, returning null for non-string values
+ */
 export const toStringOrNull = (v: unknown): string | null =>
     isString(v) ? v : null;
 

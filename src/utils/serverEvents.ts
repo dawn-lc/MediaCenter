@@ -9,30 +9,44 @@ export const serverEvents = new EventEmitter();
 // SSE 客户端连接数可能较多，避免 maxListeners 告警
 serverEvents.setMaxListeners(0);
 
-/** 允许通过 SSE 对外推送的事件名（新增事件需同步加入） */
+/**
+ * 允许通过 SSE 对外推送的事件名（新增事件需同步加入）
+ */
 export const PUSH_EVENTS = ['media.updated'] as const;
 
-/** SSE 连接的用户身份（与 req.user 一致） */
+/**
+ * SSE 连接的用户身份（与 req.user 一致）
+ */
 export interface SseUser {
     id: string | null;
     username: string;
     role: string;
 }
 
-/** 媒体可见性描述（用于按连接用户过滤推送，与 listMedia 的角色过滤一致） */
+/**
+ * 媒体可见性描述（用于按连接用户过滤推送，与 listMedia 的角色过滤一致）
+ */
 export interface MediaVisibility {
     uploaderId: string | null;
     minRole: string;
 }
 
-/** media.updated 事件负载 */
+/**
+ * media.updated 事件负载
+ */
 export interface MediaEventPayload {
     type: 'created' | 'updated' | 'deleted' | 'restored' | 'scanned';
-    /** 触发者 id：不推回给触发者本人（其 UI 已反映变更） */
+    /**
+     * 触发者 id：不推回给触发者本人（其 UI 已反映变更）
+     */
     actorId?: string;
-    /** 具体变更媒体的 id（客户端可做增量处理） */
+    /**
+     * 具体变更媒体的 id（客户端可做增量处理）
+     */
     mediaId?: string;
-    /** 媒体可见性：仅推送给能看到该媒体的用户 */
+    /**
+     * 媒体可见性：仅推送给能看到该媒体的用户
+     */
     visibility?: MediaVisibility;
 }
 

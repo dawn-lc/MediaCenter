@@ -7,11 +7,15 @@ export interface User {
     banned?: number;
     createdAt?: string;
     updatedAt?: string;
-    /** 系统账户（API 服务账户）：禁止删除/降级/封禁 */
+    /**
+     * 系统账户（API 服务账户）：禁止删除/降级/封禁
+     */
     isSystemUser?: boolean;
 }
 
-/** 公开用户主页的媒体统计（/api/users/:id） */
+/**
+ * 公开用户主页的媒体统计（/api/users/:id）
+ */
 export interface PublicUserStats {
     total: number;
     video: number;
@@ -19,7 +23,9 @@ export interface PublicUserStats {
     image: number;
 }
 
-/** 公开作者主页的媒体统计（/api/authors/:id） */
+/**
+ * 公开作者主页的媒体统计（/api/authors/:id）
+ */
 export interface PublicAuthorStats {
     total: number;
     video: number;
@@ -41,12 +47,18 @@ export interface Media {
     thumbPath: string | null;
     mediaInfo?: string | null;
     thumbUrl?: string | null;
-    /** 来源 URL */
+    /**
+     * 来源 URL
+     */
     source?: string | null;
     sourceMeta?: string | null;
-    /** 作者 */
+    /**
+     * 作者
+     */
     author?: { id: string; name: string; altNames: string[]; urls: string[] } | null;
-    /** 列表平铺返回的作者字段（listMedia） */
+    /**
+     * 列表平铺返回的作者字段（listMedia）
+     */
     authorId?: string | null;
     authorName?: string | null;
     uploaderId: string;
@@ -54,33 +66,51 @@ export interface Media {
     createdAt: string;
     updatedAt: string;
     uploaderName: string | null;
-    /** 带签名的临时流媒体访问链接（后端生成，有过期时间） */
+    /**
+     * 带签名的临时流媒体访问链接（后端生成，有过期时间）
+     */
     streamUrl?: string;
-    /** 带签名的临时下载链接（后端生成，有过期时间） */
+    /**
+     * 带签名的临时下载链接（后端生成，有过期时间）
+     */
     downloadUrl?: string;
-    /** 标签列表 */
+    /**
+     * 标签列表
+     */
     tags?: { id: string; name: string }[];
 }
 
-/** 首页概览统计（/api/media/stats） */
+/**
+ * 首页概览统计（/api/media/stats）
+ */
 export interface MediaStats {
     total: number;
     video: number;
     audio: number;
     image: number;
-    /** 总大小，仅管理员返回；其他角色该字段缺失（后端全局 prune 移除 null） */
+    /**
+     * 总大小，仅管理员返回；其他角色该字段缺失（后端全局 prune 移除 null）
+     */
     totalSize?: number;
 }
 
 export interface StatsResponse {
     media: MediaStats;
-    /** 标签数，仅管理员返回；其他角色该字段缺失 */
+    /**
+     * 标签数，仅管理员返回；其他角色该字段缺失
+     */
     tags?: number;
-    /** 作者数，仅管理员返回；其他角色该字段缺失 */
+    /**
+     * 作者数，仅管理员返回；其他角色该字段缺失
+     */
     authors?: number;
-    /** 用户数，仅管理员返回；其他角色该字段缺失 */
+    /**
+     * 用户数，仅管理员返回；其他角色该字段缺失
+     */
     users?: number;
-    /** 最近上传（可见范围内，最新 8 条） */
+    /**
+     * 最近上传（可见范围内，最新 8 条）
+     */
     recent: (Pick<Media, 'id' | 'title' | 'mimeType' | 'fileSize' | 'duration' | 'createdAt'> & {
         streamUrl?: string;
         thumbUrl?: string | null;

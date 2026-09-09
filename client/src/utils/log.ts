@@ -4,7 +4,9 @@
 
 const isDev = import.meta.env.DEV;
 
-/** 按 namespace 输出调试日志，生产构建中无调用痕迹 */
+/**
+ * 按 namespace 输出调试日志，生产构建中无调用痕迹
+ */
 export function createLogger(namespace: string) {
     if (!isDev) return () => { };
 

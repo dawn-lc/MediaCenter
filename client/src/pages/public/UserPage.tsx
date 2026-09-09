@@ -9,7 +9,9 @@ import MediaCard from '../../components/list/MediaCard';
 import Pagination from '../../components/list/Pagination';
 import LoadingState from '../../components/feedback/LoadingState';
 
-/** 用户主页媒体分页每页条数 */
+/**
+ * 用户主页媒体分页每页条数
+ */
 const PAGE_SIZE = 12;
 
 /**

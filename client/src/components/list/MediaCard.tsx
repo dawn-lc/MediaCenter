@@ -23,11 +23,17 @@ type CardMedia = Pick<Media, 'id' | 'title' | 'mimeType' | 'fileSize' | 'created
 
 interface MediaCardProps {
     media: CardMedia;
-    /** 显示上传者链接（默认 true） */
+    /**
+     * 显示上传者链接（默认 true）
+     */
     showUploader?: boolean;
-    /** 显示作者链接（默认 true） */
+    /**
+     * 显示作者链接（默认 true）
+     */
     showAuthor?: boolean;
-    /** 卡片正文附加内容（如标签列表），渲染在元信息之后 */
+    /**
+     * 卡片正文附加内容（如标签列表），渲染在元信息之后
+     */
     children?: React.ReactNode;
 }
 

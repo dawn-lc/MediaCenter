@@ -2,11 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 export interface AdminTableStateOptions {
-    /** 默认排序列 */
+    /**
+     * 默认排序列
+     */
     defaultSortBy: string;
-    /** 默认排序方向 */
+    /**
+     * 默认排序方向
+     */
     defaultSortOrder: 'asc' | 'desc';
-    /** 新排序列默认降序的键（如 mediaCount），其余新列默认升序 */
+    /**
+     * 新排序列默认降序的键（如 mediaCount），其余新列默认升序
+     */
     newColumnDescKeys?: string[];
 }
 
@@ -18,15 +24,23 @@ export interface AdminTableState {
 }
 
 interface AdminTableStateApi extends AdminTableState {
-    /** 搜索词变化（自动重置到第一页） */
+    /**
+     * 搜索词变化（自动重置到第一页）
+     */
     setSearch(value: string): void;
-    /** 表头排序：同列切换方向，新列按配置默认方向，自动重置到第一页 */
+    /**
+     * 表头排序：同列切换方向，新列按配置默认方向，自动重置到第一页
+     */
     setSort(key: string): void;
-    /** 翻页 */
+    /**
+     * 翻页
+     */
     setPage(p: number): void;
 }
 
-/** 解析 URL 参数 → 状态（缺失回退默认值） */
+/**
+ * 解析 URL 参数 → 状态（缺失回退默认值）
+ */
 function parseParams(params: URLSearchParams, o: AdminTableStateOptions): AdminTableState {
     const raw = params.get('sort') || '';
     const [field, dir] = raw.split(':');
@@ -38,7 +52,9 @@ function parseParams(params: URLSearchParams, o: AdminTableStateOptions): AdminT
     };
 }
 
-/** 状态 → URL 参数（空值/默认值自动删除，保持 URL 干净） */
+/**
+ * 状态 → URL 参数（空值/默认值自动删除，保持 URL 干净）
+ */
 function buildParams(base: URLSearchParams, s: AdminTableState, o: AdminTableStateOptions): URLSearchParams {
     const next = new URLSearchParams(base);
     const setOrDel = (k: string, v: string) => (v ? next.set(k, v) : next.delete(k));

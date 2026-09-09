@@ -22,7 +22,9 @@ function svgProps(size: number, className?: string) {
     };
 }
 
-/** 太阳（浅色） */
+/**
+ * 太阳（浅色）
+ */
 export function SunIcon({ size = 20, className }: IconProps) {
     return (
         <svg {...svgProps(size, className)}>
@@ -32,7 +34,9 @@ export function SunIcon({ size = 20, className }: IconProps) {
     );
 }
 
-/** 月亮（深色） */
+/**
+ * 月亮（深色）
+ */
 export function MoonIcon({ size = 20, className }: IconProps) {
     return (
         <svg {...svgProps(size, className)}>
@@ -41,7 +45,9 @@ export function MoonIcon({ size = 20, className }: IconProps) {
     );
 }
 
-/** 显示器（跟随系统） */
+/**
+ * 显示器（跟随系统）
+ */
 export function MonitorIcon({ size = 20, className }: IconProps) {
     return (
         <svg {...svgProps(size, className)}>

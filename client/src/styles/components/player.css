@@ -1,6 +1,4 @@
-/* ============================================
-    播放器
-   ============================================ */
+/* 播放器 */
 
 .player-container {
     max-width: 960px;
@@ -79,7 +77,6 @@
     word-break: break-word;
 }
 
-/* ========== 播放控制栏 ========== */
 .player-controls {
     display: flex;
     align-items: center;
@@ -109,7 +106,6 @@
     white-space: nowrap;
 }
 
-/* ========== 描述（Markdown 渲染） ========== */
 .player-desc {
     margin-bottom: 12px;
     font-size: 14px;
@@ -255,7 +251,6 @@
     color: var(--text-primary);
 }
 
-/* ========== 元信息行 ========== */
 .player-meta {
     display: flex;
     flex-wrap: wrap;
@@ -332,7 +327,6 @@
     align-self: center;
 }
 
-/* ========== 播放列表侧边栏 ========== */
 .player-sidebar {
     position: relative;
     width: 320px;
@@ -469,7 +463,6 @@
     flex-shrink: 0;
 }
 
-/* ========== 音频页 ========== */
 .audio-card {
     position: relative;
     background: var(--audio-card-bg);
@@ -484,7 +477,6 @@
     max-width: 500px;
 }
 
-/* ========== 图片页 ========== */
 .image-wrapper {
     position: relative;
     background: #000;
@@ -520,7 +512,6 @@
     border-top-color: #fff;
 }
 
-/* ========== 播放器布局 ========== */
 .player-page {
     max-width: 1400px;
     margin: 0 auto;

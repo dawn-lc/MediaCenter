@@ -7,7 +7,9 @@ import { hashPassword } from '../utils/hash';
 import { serverEvents } from '../utils/serverEvents';
 import config from '../config';
 
-/** 系统保留账户（如 API 服务账户）：禁止删除/降级/封禁 */
+/**
+ * 系统保留账户（如 API 服务账户）：禁止删除/降级/封禁
+ */
 function isSystemUser(username: string): boolean {
     return username === API_USERNAME;
 }

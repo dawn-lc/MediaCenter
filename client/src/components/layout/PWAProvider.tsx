@@ -26,7 +26,8 @@ export default function PWAProvider({ children }: PWAProviderProps) {
         // 媒体变更推送 → 转发为窗口事件，供页面订阅刷新（与 SESSION_EXPIRED_EVENT 同模式）
         es.addEventListener('media.updated', (e) => {
             let detail: unknown = undefined;
-            try { detail = JSON.parse((e as MessageEvent).data ?? 'null'); } catch { /* ignore */ }
+            try { detail = JSON.parse((e as MessageEvent).data ?? 'null'); } catch { // ignore
+            }
             window.dispatchEvent(new CustomEvent('mediacenter:media-updated', { detail }));
         });
         return () => es.close();

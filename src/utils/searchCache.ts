@@ -32,7 +32,9 @@ export function searchCacheSet(key: string, data: unknown): void {
     store.set(key, { at: Date.now(), data });
 }
 
-/** 媒体数据变化时整体失效（任何写入都会改变搜索候选集/排名） */
+/**
+ * 媒体数据变化时整体失效（任何写入都会改变搜索候选集/排名）
+ */
 export function invalidateSearchCache(): void {
     store.clear();
 }

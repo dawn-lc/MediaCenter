@@ -42,10 +42,10 @@ WORKDIR /app
 # 安装运行时依赖（ffmpeg 用于提取媒体元数据）
 RUN apk add --no-cache ffmpeg
 
-# 安装生产依赖
+# 安装生产依赖（cache mount 由 BuildKit 管理，构建后自动清理，无需 npm cache clean）
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev && npm cache clean --force
+    npm ci --omit=dev
 
 # 分别从各 Builder 复制产物，避免引入任何构建时文件
 COPY --from=server-builder /app/dist/index.js ./index.js

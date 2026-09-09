@@ -1,6 +1,4 @@
-/* ============================================
-   右下角悬浮主题切换开关
-   ============================================ */
+/* 右下角悬浮主题切换开关 */
 
 .theme-toggle {
     position: fixed;
@@ -12,7 +10,7 @@
     align-items: flex-end;
 }
 
-/* ── 悬浮按钮（FAB） ── */
+/* 悬浮按钮（FAB） */
 .theme-fab {
     width: 52px;
     height: 52px;
@@ -59,7 +57,7 @@ html[data-theme='light'] .theme-fab {
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
 }
 
-/* ── 展开菜单 ── */
+/* 展开菜单 */
 .theme-menu {
     position: absolute;
     bottom: calc(100% + 12px);
@@ -134,5 +132,4 @@ body:has(:fullscreen) .theme-toggle {
     display: none;
 }
 
-/* 移动端播放页避让底部固定悬浮控制栏：由 ThemeToggle 组件用 JS 动态测量
-   .player-controls 实际高度并写入内联 bottom，此处不再硬编码高度 */
+/* 移动端播放页避让底部固定悬浮控制栏：由 ThemeToggle 组件用 JS 动态测量 .player-controls 实际高度并写入内联 bottom，此处不再硬编码高度 */

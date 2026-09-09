@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Api, resolveApiUrl } from '../api';
 import { SIGN_URL_TTL_MARGIN, SIGN_URL_EXPIRES_PARAM } from '../config';
 
-/** 从签名 URL 中提取 expires 时间戳 */
+/**
+ * 从签名 URL 中提取 expires 时间戳
+ */
 function getExpiresFromUrl(url: string): number {
     try {
         return parseInt(new URL(url, window.location.origin).searchParams.get(SIGN_URL_EXPIRES_PARAM) || '0', 10);
@@ -11,7 +13,9 @@ function getExpiresFromUrl(url: string): number {
     }
 }
 
-/** 当前 URL 的签名是否仍在有效期内（提前 minTTL 秒视为过期） */
+/**
+ * 当前 URL 的签名是否仍在有效期内（提前 minTTL 秒视为过期）
+ */
 function isUrlFresh(url: string, minTTL = SIGN_URL_TTL_MARGIN): boolean {
     const expires = getExpiresFromUrl(url);
     if (!expires) return false;
@@ -49,7 +53,9 @@ export function useStreamToken(mediaId: string | undefined, initialUrl: string |
         }
     }, []);
 
-    /** 仅在签名不足 minTTL 秒时刷新 */
+    /**
+     * 仅在签名不足 minTTL 秒时刷新
+     */
     const refreshIfNeeded = useCallback(
         async (minTTL = SIGN_URL_TTL_MARGIN) => {
             const id = mediaIdRef.current;

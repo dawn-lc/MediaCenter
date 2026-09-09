@@ -9,10 +9,14 @@
  * 是否与分辨率匹配，不匹配则直接拒绝解码。
  */
 
-/** WebM 编解码器族：VP8 / VP9 / AV1 */
+/**
+ * WebM 编解码器族：VP8 / VP9 / AV1
+ */
 export const WEBM_VIDEO_CODECS = new Set(['vp8', 'vp9', 'av1']);
 
-/** 需要归一化的容器 MIME 类型（浏览器原生支持差） */
+/**
+ * 需要归一化的容器 MIME 类型（浏览器原生支持差）
+ */
 export const NORMALIZE_CONTAINERS = new Set(['video/x-matroska', 'video/quicktime']);
 
 /**
@@ -43,7 +47,9 @@ const H264_LEVEL_MAX_MB: Record<number, number> = {
     60: 69632, 61: 139264, 62: 139264,         // Level 6.x (8K)
 };
 
-/** 根据分辨率计算需要的 H.264 level（最低满足的 level × 10） */
+/**
+ * 根据分辨率计算需要的 H.264 level（最低满足的 level × 10）
+ */
 export function calcRequiredLevel(width: number, height: number): number {
     const mbW = Math.ceil(width / 16);
     const mbH = Math.ceil(height / 16);

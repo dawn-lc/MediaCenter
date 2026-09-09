@@ -13,7 +13,9 @@ import Pagination from '../components/list/Pagination';
 import LoadingState from '../components/feedback/LoadingState';
 import ToggleSwitch from '../components/form/ToggleSwitch';
 
-/** 个人中心"我的媒体"分页每页条数 */
+/**
+ * 个人中心"我的媒体"分页每页条数
+ */
 const PROFILE_PAGE_SIZE = 12;
 
 /**

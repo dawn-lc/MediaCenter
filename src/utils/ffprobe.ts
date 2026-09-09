@@ -4,33 +4,47 @@ import { stat } from 'fs/promises';
 
 const execFileAsync = promisify(execFile);
 
-/** ffprobe 提取的容器级信息 */
+/**
+ * ffprobe 提取的容器级信息
+ */
 export interface ProbeContainer {
     format: string | null;        // e.g., "matroska", "mov"
     duration: number | null;      // seconds
     bitrate: number | null;       // overall bitrate (bps)
 }
 
-/** ffprobe 提取的流级信息 */
+/**
+ * ffprobe 提取的流级信息
+ */
 export interface ProbeStream {
     codec: string | null;         // e.g., "h264", "hevc", "aac", "mp3"
     width: number | null;         // video only
     height: number | null;        // video only
 }
 
-/** 完整的媒体探测结果 */
+/**
+ * 完整的媒体探测结果
+ */
 export interface MediaInfo {
     duration: number | null;
-    /** 视频编码短名，如 "h264", "hevc", "vp9" */
+    /**
+     * 视频编码短名，如 "h264", "hevc", "vp9"
+     */
     videoCodec: string | null;
-    /** H.264 level (如 41=4.1, 50=5.0)，仅 H.264 有 */
+    /**
+     * H.264 level (如 41=4.1, 50=5.0)，仅 H.264 有
+     */
     videoLevel: number | null;
-    /** 音频编码短名，如 "aac", "mp3", "opus" */
+    /**
+     * 音频编码短名，如 "aac", "mp3", "opus"
+     */
     audioCodec: string | null;
     width: number | null;
     height: number | null;
     bitrate: number | null;
-    /** 容器格式名，如 "matroska", "mov,mp4,m4a,3gp,3g2,mj2" */
+    /**
+     * 容器格式名，如 "matroska", "mov,mp4,m4a,3gp,3g2,mj2"
+     */
     container: string | null;
 }
 

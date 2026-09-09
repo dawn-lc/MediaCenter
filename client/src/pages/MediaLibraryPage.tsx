@@ -16,10 +16,14 @@ import EmptyState from '../components/feedback/EmptyState';
 
 import { HOME_PAGE_SIZE, DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER, STORAGE_PREFIX, TAG_EXPR_MAX_LENGTH } from '../config';
 
-/** 文本输入防抖自动搜索延迟（毫秒） */
+/**
+ * 文本输入防抖自动搜索延迟（毫秒）
+ */
 const SEARCH_DEBOUNCE_MS = 500;
 
-/** 全部筛选/搜索/排序/分页参数（URL 为唯一数据源，输入框值即 URL 参数值） */
+/**
+ * 全部筛选/搜索/排序/分页参数（URL 为唯一数据源，输入框值即 URL 参数值）
+ */
 interface QueryState {
     search: string;
     tagExpr: string;
@@ -31,7 +35,9 @@ interface QueryState {
     page: number;
 }
 
-/** 从 URLSearchParams 解析所有参数（纯函数：缺失即默认值，不回退 localStorage） */
+/**
+ * 从 URLSearchParams 解析所有参数（纯函数：缺失即默认值，不回退 localStorage）
+ */
 function parseUrlParams(params: URLSearchParams): QueryState {
     const raw = params.get('sort') || '';
     const [sortField, sortDir] = raw ? raw.split(':') : [];
@@ -47,7 +53,9 @@ function parseUrlParams(params: URLSearchParams): QueryState {
     };
 }
 
-/** 将状态写入 URL 参数：空值/默认值自动删除，保持 URL 干净 */
+/**
+ * 将状态写入 URL 参数：空值/默认值自动删除，保持 URL 干净
+ */
 function applyParamsToSearchParams(base: URLSearchParams, q: QueryState): URLSearchParams {
     const next = new URLSearchParams(base);
     const setOrDel = (k: string, v: string) => v ? next.set(k, v) : next.delete(k);
@@ -79,7 +87,7 @@ function loadState(): Partial<HomeState> {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw);
     } catch {
-        /* ignore */
+        // ignore
     }
     return {};
 }
@@ -88,7 +96,7 @@ function saveState(state: Partial<HomeState>): void {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
-        /* ignore */
+        // ignore
     }
 }
 

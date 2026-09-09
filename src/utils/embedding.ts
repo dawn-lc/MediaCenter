@@ -108,7 +108,9 @@ export async function getQueryEmbeddings(query: string): Promise<number[][] | nu
     }
 }
 
-/** 批量生成标题向量(已清洗); 失败返回 null */
+/**
+ * 批量生成标题向量(已清洗); 失败返回 null
+ */
 export async function getTitleEmbeddings(titles: string[]): Promise<number[][] | null> {
     try {
         return await embed(titles.map(cleanTitleForEmbedding));

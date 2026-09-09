@@ -13,7 +13,9 @@ const THUMB_PREFIX = '/thumb?id=';
 const HEAD_SIZE = 1_048_576;  // 拉取文件头部 1MB（覆盖 ~90% 的头部位 moov）
 const TAIL_SIZE = 1_048_576;  // moov 在尾部时拉取尾部 1MB
 
-/** 确保获取完整的 moov atom（头部不完整时精确重拉，头部无则尾部搜索） */
+/**
+ * 确保获取完整的 moov atom（头部不完整时精确重拉，头部无则尾部搜索）
+ */
 async function getFullMoov(
     videoUrl: string, headBuf: ArrayBuffer,
 ): Promise<ArrayBuffer | null> {
@@ -185,7 +187,9 @@ export async function generateVideoThumbnail(
 
 // ── 辅助函数 ──
 
-/** 带 Range 的 fetch */
+/**
+ * 带 Range 的 fetch
+ */
 async function rangeFetch(
     url: string, start: number, end: number,
 ): Promise<ArrayBuffer | null> {
@@ -220,7 +224,9 @@ async function rangeFetch(
     }
 }
 
-/** 获取文件总大小，同时尝试 Range + HEAD 两种方式 */
+/**
+ * 获取文件总大小，同时尝试 Range + HEAD 两种方式
+ */
 async function getFileSize(url: string): Promise<number | null> {
     try {
         // 方式 1：Range 请求前 1KB，从 Content-Range 读取总大小
@@ -256,7 +262,9 @@ async function getFileSize(url: string): Promise<number | null> {
     }
 }
 
-/** 拼装微型 MP4：ftyp + moov(修正stco) + mdat */
+/**
+ * 拼装微型 MP4：ftyp + moov(修正stco) + mdat
+ */
 function buildMiniMp4(
     headBuf: ArrayBuffer,
     moovBuf: ArrayBuffer,
@@ -400,7 +408,9 @@ async function isNearSolidColor(blob: Blob): Promise<boolean> {
     });
 }
 
-/** 将 MP4 blob 喂给 <video> 解码，可指定 seek 到目标时间（秒）截取 */
+/**
+ * 将 MP4 blob 喂给 <video> 解码，可指定 seek 到目标时间（秒）截取
+ */
 function decodeFrame(blob: Blob, seekTime?: number): Promise<Blob | null> {
     return new Promise((resolve) => {
         const blobUrl = URL.createObjectURL(blob);
@@ -464,12 +474,16 @@ function decodeFrame(blob: Blob, seekTime?: number): Promise<Blob | null> {
 
 // ── 缓存操作 ──
 
-/** 缓存键 & SW 路由：/thumb?client=<mediaId> */
+/**
+ * 缓存键 & SW 路由：/thumb?client=<mediaId>
+ */
 function cacheKey(mediaId: string): string {
     return `${THUMB_PREFIX}${mediaId}`;
 }
 
-/** 将缩略图存入 SW 缓存 */
+/**
+ * 将缩略图存入 SW 缓存
+ */
 export async function cacheThumbnail(mediaId: string, blob: Blob): Promise<void> {
     try {
         const cache = await caches.open(THUMB_CACHE);

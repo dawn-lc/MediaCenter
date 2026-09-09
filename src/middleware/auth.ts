@@ -101,10 +101,14 @@ export function requirePermission(minLevel: number) {
     };
 }
 
-/** 管理员权限中间件 */
+/**
+ * 管理员权限中间件
+ */
 export const requireAdmin = requirePermission(config.roles.admin);
 
-/** 用户权限中间件 */
+/**
+ * 用户权限中间件
+ */
 export const requireUser = requirePermission(config.roles.user);
 
 /**

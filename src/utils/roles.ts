@@ -4,7 +4,9 @@ import './env';
 type Role = keyof typeof config.roles;
 const ROLES = config.roles;
 
-/** 媒体可见性角色枚举 */
+/**
+ * 媒体可见性角色枚举
+ */
 export enum MediaRole {
     Guest = 'guest',
     User = 'user',
@@ -12,12 +14,18 @@ export enum MediaRole {
     Admin = 'admin'
 }
 
-/** 所有媒体可见性级别 */
+/**
+ * 所有媒体可见性级别
+ */
 export const ALL_ROLES = Object.values(MediaRole);
-/** 上传者可用的媒体可见性级别（不含 admin） */
+/**
+ * 上传者可用的媒体可见性级别（不含 admin）
+ */
 export const USER_ROLES = ALL_ROLES.difference([MediaRole.Admin]);
 
-/** 角色层级权重（用于媒体访问控制） */
+/**
+ * 角色层级权重（用于媒体访问控制）
+ */
 const ROLE_WEIGHT: Record<MediaRole, number> = {
     [MediaRole.Guest]: 0,
     [MediaRole.User]: 1,
@@ -25,12 +33,16 @@ const ROLE_WEIGHT: Record<MediaRole, number> = {
     [MediaRole.Admin]: 3
 };
 
-/** 判断字符串是否为有效的 MediaRole */
+/**
+ * 判断字符串是否为有效的 MediaRole
+ */
 function isMediaRole(value: string): value is MediaRole {
     return Object.values(MediaRole).some((r) => r === value);
 }
 
-/** 判断字符串是否为有效的 Role */
+/**
+ * 判断字符串是否为有效的 Role
+ */
 function isRole(value: string): value is Role {
     return value in ROLES;
 }

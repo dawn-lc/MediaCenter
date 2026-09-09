@@ -6,7 +6,9 @@ import config from '../config';
 
 const execFileAsync = promisify(execFile);
 
-/** 缩略图存储目录（<UPLOAD_DIR>/<config.thumbSubdir>） */
+/**
+ * 缩略图存储目录（<UPLOAD_DIR>/<config.thumbSubdir>）
+ */
 export function getThumbDir(): string {
     const dir = join(config.uploadDir, config.thumbSubdir);
     if (!existsSync(dir)) {
@@ -15,7 +17,9 @@ export function getThumbDir(): string {
     return dir;
 }
 
-/** 媒体缩略图文件路径（WebP 格式，与前端客户端生成的缩略图一致） */
+/**
+ * 媒体缩略图文件路径（WebP 格式，与前端客户端生成的缩略图一致）
+ */
 export function getThumbPath(mediaId: string): string {
     return join(getThumbDir(), `${mediaId}.webp`);
 }

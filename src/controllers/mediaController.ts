@@ -21,7 +21,9 @@ import { serverEvents } from '../utils/serverEvents';
 
 // ========== 表达式求值器（标签 / 作者维度）==========
 
-/** 获取所有未删除的媒体 ID（NOT 运算全集） */
+/**
+ * 获取所有未删除的媒体 ID（NOT 运算全集）
+ */
 async function getAllMediaIds(): Promise<Set<string>> {
     const db = getDatabase();
     const rows = await db
@@ -32,7 +34,9 @@ async function getAllMediaIds(): Promise<Set<string>> {
     return new Set(rows.map((r) => r.id));
 }
 
-/** 标签维度求值：叶子 → 匹配 tags.name / altNames */
+/**
+ * 标签维度求值：叶子 → 匹配 tags.name / altNames
+ */
 async function evaluateTagAst(node: ExprNode): Promise<Set<string>> {
     return evaluateExpr(node, async (name) => {
         const db = getDatabase();
@@ -51,7 +55,9 @@ async function evaluateTagAst(node: ExprNode): Promise<Set<string>> {
     }, getAllMediaIds);
 }
 
-/** 作者维度求值：叶子 → 匹配 authors.name / altNames → 反查 media */
+/**
+ * 作者维度求值：叶子 → 匹配 authors.name / altNames → 反查 media
+ */
 async function evaluateAuthorAst(node: ExprNode): Promise<Set<string>> {
     return evaluateExpr(node, async (name) => {
         const db = getDatabase();
@@ -588,7 +594,9 @@ export async function refreshStreamToken(req: Request, res: Response): Promise<v
 
 // ========== 媒体记录创建（uploadMedia / createMedia 共享）==========
 
-/** 检查文件是否已存在，是则返回 409 */
+/**
+ * 检查文件是否已存在，是则返回 409
+ */
 async function checkDuplicate(fileHash: string | null): Promise<{ id: string; title: string } | null> {
     if (!fileHash) return null;
     const db = getDatabase();
@@ -601,7 +609,9 @@ async function checkDuplicate(fileHash: string | null): Promise<{ id: string; ti
     return row ?? null;
 }
 
-/** 解析 uploaderId：无用户 ID 时（如流式签名身份/异常场景）回退为首个管理员 */
+/**
+ * 解析 uploaderId：无用户 ID 时（如流式签名身份/异常场景）回退为首个管理员
+ */
 async function resolveUploaderId(req: Request): Promise<string> {
     if (req.user!.id) return req.user!.id;
     const db = getDatabase();
@@ -614,7 +624,9 @@ async function resolveUploaderId(req: Request): Promise<string> {
     return u!.id; // ensureDefaultUsers 保证管理员存在
 }
 
-/** 探测媒体文件，返回归一化后的 probe 结果；失败返回 null */
+/**
+ * 探测媒体文件，返回归一化后的 probe 结果；失败返回 null
+ */
 async function probeMediaFile(
     filePath: string,
     currentMimeType: string
@@ -628,7 +640,15 @@ async function probeMediaFile(
     };
 }
 
-/** 探测媒体 → 写入 DB → 返回新记录的 id */
+/**
+ * 探测媒体 → 写入 DB → 返回新记录的 id
+ *
+ * probe 失败时降级创建占位记录（不抛错）：
+ * - 外部工具（IwaraDownloadTool pushToMediaCenter）在下载完成时推送，但 aria2 下载可能中断/仍持有 .aria2 控制文件，
+ *   导致目标 .mp4 暂不存在或不可探测。此时 500 会让推送重试 5 分钟后再次 500，永远无法入库存档。
+ * - 降级后 duration/mimeType/mediaInfo 留空，由后续 updateMedia（工具重试推送）或首次播放时
+ *   streamController 的 updateMediaInfo 补全——与 updateMedia 的容错模式（probe 失败静默保留原值）一致。
+ */
 async function createMediaRecord(
     req: Request,
     params: {
@@ -646,9 +666,10 @@ async function createMediaRecord(
     const id = params.id ?? uuidv4();
     const uploaderId = await resolveUploaderId(req);
 
+    // probe 失败不阻断入库：文件可能仍在下载/暂不可读，降级为占位记录
     const probe = await probeMediaFile(params.filePath, params.mimeType);
     if (!probe) {
-        throw new Error('无法识别媒体类型');
+        console.warn('[Media] 创建时探测失败，降级为占位记录:', params.filePath);
     }
 
     // 注意：创建记录时文件可能仍在下载中（仅部分写入），此时 stat 会得到不完整大小，
@@ -664,9 +685,9 @@ async function createMediaRecord(
             filePath: params.filePath,
             fileHash: params.fileHash,
             fileSize: params.fileSize,
-            duration: probe.info.duration,
-            mimeType: probe.bestMimeType,
-            mediaInfo: probe.serialized,
+            duration: probe?.info.duration ?? null,
+            mimeType: probe?.bestMimeType ?? params.mimeType,
+            mediaInfo: probe?.serialized ?? null,
             sourceMeta: params.sourceMeta ?? null,
             uploaderId,
             minRole: 'owner'
@@ -684,7 +705,9 @@ async function createMediaRecord(
     return id;
 }
 
-/** 探测媒体文件并更新数据库记录（探针失败时静默返回原值） */
+/**
+ * 探测媒体文件并更新数据库记录（探针失败时静默返回原值）
+ */
 export async function updateMediaInfo(
     mediaId: string,
     filePath: string,
@@ -726,7 +749,8 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         // 检查重复（在 rename 前，以便清理临时文件）
         const dup = await checkDuplicate(fileHash);
         if (dup) {
-            try { deleteFile(filePath); } catch { /* ignore */ }
+            try { deleteFile(filePath); } catch { // ignore
+            }
             res.status(409).json({ error: 'media.duplicateFile', existingId: dup.id, existingTitle: dup.title });
             return;
         }
@@ -929,7 +953,8 @@ export async function updateMedia(req: Request, res: Response): Promise<void> {
         try {
             const fileStat = await stat(targetFilePath);
             updates.fileSize = fileStat.size;
-        } catch { /* 文件不存在或不可读时保持原值 */ }
+        } catch { // 文件不存在或不可读时保持原值
+        }
 
         // 执行更新
         if (Object.keys(updates).length > 0) {

@@ -7,7 +7,9 @@ import MediaCard from '../../components/list/MediaCard';
 import Pagination from '../../components/list/Pagination';
 import LoadingState from '../../components/feedback/LoadingState';
 
-/** 作者主页媒体分页每页条数 */
+/**
+ * 作者主页媒体分页每页条数
+ */
 const PAGE_SIZE = 12;
 
 /**

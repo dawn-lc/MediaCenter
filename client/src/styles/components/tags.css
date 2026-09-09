@@ -1,6 +1,4 @@
-/* ============================================
-   标签 & 徽章
-   ============================================ */
+/* 标签 & 徽章 */
 
 .player-tags {
     display: flex;
@@ -35,7 +33,6 @@
     background: rgba(108, 92, 231, 0.1);
 }
 
-/* ========== 标签选择器 ========== */
 .tag-selector-wrapper {
     position: relative;
 }
@@ -133,7 +130,6 @@
     color: var(--danger);
 }
 
-/* ========== 标签分组高亮颜色（无限色相，用 CSS 变量 --tag-hue 控制） ========== */
 .tag-group-highlight {
     background: hsl(var(--tag-hue, 260), 60%, 40%, 0.45) !important;
     border-color: hsl(var(--tag-hue, 260), 60%, 40%, 0.7) !important;
@@ -156,7 +152,6 @@ html[data-theme='light'] .tag-group-highlight {
     color: hsl(var(--tag-hue, 260), 70%, 22%) !important;
 }
 
-/* ========== 徽章 ========== */
 .badge {
     display: inline-block;
     padding: 2px 8px;

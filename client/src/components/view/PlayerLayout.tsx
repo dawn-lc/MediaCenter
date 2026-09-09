@@ -10,17 +10,29 @@ import PlaylistSidebar from './PlaylistSidebar';
 
 interface PlayerLayoutProps {
     media: Media;
-    /** 媒体元素（video / audio / image） */
+    /**
+     * 媒体元素（video / audio / image）
+     */
     children: ReactNode;
-    /** 给 PlayerControls 的倒计时（仅图片） */
+    /**
+     * 给 PlayerControls 的倒计时（仅图片）
+     */
     countdown?: number;
-    /** 给 PlayerInfo 的额外 meta 插槽 */
+    /**
+     * 给 PlayerInfo 的额外 meta 插槽
+     */
     metaExtra?: React.ReactNode;
-    /** 操作卡片底部的额外按钮（设为 null 可隐藏自动播放开关） */
+    /**
+     * 操作卡片底部的额外按钮（设为 null 可隐藏自动播放开关）
+     */
     actionsExtra?: React.ReactNode;
-    /** 媒体区域容器 className */
+    /**
+     * 媒体区域容器 className
+     */
     mediaWrapperClass?: string;
-    /** 媒体区域容器额外样式 */
+    /**
+     * 媒体区域容器额外样式
+     */
     mediaWrapperStyle?: React.CSSProperties;
 }
 

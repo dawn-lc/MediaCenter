@@ -5,11 +5,17 @@ import { idbLoadPlaylist, idbSavePlaylist, idbClearPlaylist, idbLoadPlaylistMeta
 
 const STORAGE_KEY = STORAGE_PREFIX + 'playlist';
 
-/** 旧版单一切换模式（兼容 localStorage 迁移用） */
+/**
+ * 旧版单一切换模式（兼容 localStorage 迁移用）
+ */
 type LegacyPlayMode = 'list' | 'loop' | 'shuffle' | 'repeatOne' | 'manual';
-/** 循环控制（与播放列表推进方式独立） */
+/**
+ * 循环控制（与播放列表推进方式独立）
+ */
 export type LoopMode = 'off' | 'repeatOne' | 'repeatAll';
-/** 播放列表推进方式（与循环控制独立） */
+/**
+ * 播放列表推进方式（与循环控制独立）
+ */
 export type PlayOrder = 'sequential' | 'shuffle' | 'manual';
 
 // 不限制播单最大条数（由虚拟滚动保证渲染性能）
@@ -51,7 +57,9 @@ interface SavedPlaylist {
     playOrder: PlayOrder;
 }
 
-/** 旧版单一 playMode → 新双配置的迁移映射 */
+/**
+ * 旧版单一 playMode → 新双配置的迁移映射
+ */
 const LEGACY_MODE_MAP: Record<LegacyPlayMode, Pick<SavedPlaylist, 'loopMode' | 'playOrder'>> = {
     list: { loopMode: 'off', playOrder: 'sequential' },
     loop: { loopMode: 'repeatAll', playOrder: 'sequential' },
@@ -84,22 +92,34 @@ function load(): SavedPlaylist | null {
     }
 }
 
-/** 同步初始值：旧 localStorage（IndexedDB 异步加载完成前的快速恢复 + 迁移来源） */
+/**
+ * 同步初始值：旧 localStorage（IndexedDB 异步加载完成前的快速恢复 + 迁移来源）
+ */
 const legacySaved = load();
 
-/** 新格式元数据（index/loopMode/playOrder 存 localStorage，首帧同步恢复播放模式，不等队列异步加载） */
+/**
+ * 新格式元数据（index/loopMode/playOrder 存 localStorage，首帧同步恢复播放模式，不等队列异步加载）
+ */
 const savedMeta = idbLoadPlaylistMeta();
 
-/** 新格式小队列（≤4096 项存 localStorage，首帧同步恢复，避免异步竞态导致 ViewPage 误覆盖为单曲） */
+/**
+ * 新格式小队列（≤4096 项存 localStorage，首帧同步恢复，避免异步竞态导致 ViewPage 误覆盖为单曲）
+ */
 const savedQueue = idbLoadPlaylistQueueSync();
 
-/** 是否有持久化数据待异步确认（大队列在 IndexedDB）；无则首帧即视为已就绪 */
+/**
+ * 是否有持久化数据待异步确认（大队列在 IndexedDB）；无则首帧即视为已就绪
+ */
 const hasPersisted = !!savedMeta || (savedQueue?.length ?? 0) > 0;
 
-/** 用户是否已手动操作播放列表（避免异步加载覆盖用户操作） */
+/**
+ * 用户是否已手动操作播放列表（避免异步加载覆盖用户操作）
+ */
 let userActed = false;
 
-/** Fisher-Yates 洗牌：返回 0..n-1 的随机排列（随机播放的打乱序列） */
+/**
+ * Fisher-Yates 洗牌：返回 0..n-1 的随机排列（随机播放的打乱序列）
+ */
 function makeShuffleOrder(n: number): number[] {
     const order = Array.from({ length: n }, (_, i) => i);
     for (let i = n - 1; i > 0; i--) {
@@ -114,11 +134,17 @@ interface PlaylistState {
     currentIndex: number;
     loopMode: LoopMode;
     playOrder: PlayOrder;
-    /** 持久化恢复是否已完成（大队列在 IndexedDB 需异步；ViewPage 等它完成再判断单曲播放） */
+    /**
+     * 持久化恢复是否已完成（大队列在 IndexedDB 需异步；ViewPage 等它完成再判断单曲播放）
+     */
     isHydrated: boolean;
-    /** 随机模式下的打乱序列：原始 queue 索引的随机排列（仅内存，不持久化，避免 localStorage 膨胀） */
+    /**
+     * 随机模式下的打乱序列：原始 queue 索引的随机排列（仅内存，不持久化，避免 localStorage 膨胀）
+     */
     shuffleOrder: number[];
-    /** 以下均为方法而非 getter：zustand v5 的 setState 用 Object.assign 会触发 getter 求值并固化为值，导致永不更新 */
+    /**
+     * 以下均为方法而非 getter：zustand v5 的 setState 用 Object.assign 会触发 getter 求值并固化为值，导致永不更新
+     */
     total(): number;
     position(): number;
     hasNext(): boolean;
@@ -130,13 +156,21 @@ interface PlaylistState {
     clear(): void;
     setLoopMode(mode: LoopMode): void;
     setPlayOrder(order: PlayOrder): void;
-    /** 内部：重新洗牌（一轮走完时调用），确保新序列首位 ≠ 当前项，返回新序列 */
+    /**
+     * 内部：重新洗牌（一轮走完时调用），确保新序列首位 ≠ 当前项，返回新序列
+     */
     _reshuffle(): number[];
-    /** 自动推进（播放结束）的下一项索引 */
+    /**
+     * 自动推进（播放结束）的下一项索引
+     */
     getNextIndex(): number;
-    /** 按钮「下一个」专用：手动环形 / 单曲循环取序列下一项不重复自身 / 其余同 getNextIndex */
+    /**
+     * 按钮「下一个」专用：手动环形 / 单曲循环取序列下一项不重复自身 / 其余同 getNextIndex
+     */
     getManualNext(): number;
-    /** 按钮「上一个」：手动/随机取打乱序列上一项 / 顺序线性（repeatAll 首项回绕到末项） */
+    /**
+     * 按钮「上一个」：手动/随机取打乱序列上一项 / 顺序线性（repeatAll 首项回绕到末项）
+     */
     getPrevIndex(): number;
 }
 
@@ -342,7 +376,8 @@ void (async () => {
             usePlaylistStore.setState({ isHydrated: true });
         }
         // 旧 localStorage 数据已迁入持久化，清除
-        try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+        try { localStorage.removeItem(STORAGE_KEY); } catch { // ignore
+        }
     } else if (legacySaved && !userActed) {
         // 首次迁移：localStorage → 新格式（meta 走 LS / 队列按长度分级）
         await idbSavePlaylist({
@@ -351,7 +386,8 @@ void (async () => {
             loopMode: legacySaved.loopMode,
             playOrder: legacySaved.playOrder
         });
-        try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+        try { localStorage.removeItem(STORAGE_KEY); } catch { // ignore
+        }
         usePlaylistStore.setState({ isHydrated: true });
     } else {
         // 无数据可恢复（或用户已操作）：直接就绪

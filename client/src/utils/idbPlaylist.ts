@@ -17,17 +17,23 @@ const KEY = 'state';
 const META_KEY = STORAGE_PREFIX + 'playlist_meta';
 const QUEUE_LS_KEY = STORAGE_PREFIX + 'playlist_queue';
 
-/** 队列长度阈值：超过则用 IndexedDB 存储（localStorage 5MB 上限的安全余量） */
+/**
+ * 队列长度阈值：超过则用 IndexedDB 存储（localStorage 5MB 上限的安全余量）
+ */
 const LS_QUEUE_LIMIT = 4096;
 
-/** 持久化的播放列表元数据（小字段走 localStorage） */
+/**
+ * 持久化的播放列表元数据（小字段走 localStorage）
+ */
 export interface IdbPlaylistMeta {
     index: number;
     loopMode: LoopMode;
     playOrder: PlayOrder;
 }
 
-/** 持久化的播放列表状态（queue 仅存侧边栏渲染最小字段） */
+/**
+ * 持久化的播放列表状态（queue 仅存侧边栏渲染最小字段）
+ */
 export interface IdbPlaylistState {
     queue: { id: string; title: string; duration: number | null; mimeType: string }[];
     index: number;
@@ -63,7 +69,9 @@ function openDB(): Promise<IDBDatabase> {
 
 // ---------- 元数据：localStorage ----------
 
-/** 同步读取播放列表元数据（小字段，供首帧恢复播放模式） */
+/**
+ * 同步读取播放列表元数据（小字段，供首帧恢复播放模式）
+ */
 export function idbLoadPlaylistMeta(): IdbPlaylistMeta | null {
     try {
         const raw = localStorage.getItem(META_KEY);
@@ -84,12 +92,13 @@ function saveMeta(meta: IdbPlaylistMeta): void {
     try {
         localStorage.setItem(META_KEY, JSON.stringify(meta));
     } catch {
-        /* 静默 */
+        // 静默
     }
 }
 
 function clearMeta(): void {
-    try { localStorage.removeItem(META_KEY); } catch { /* */ }
+    try { localStorage.removeItem(META_KEY); } catch { // ignore
+    }
 }
 
 // ---------- 队列：localStorage（小队列） ----------
@@ -105,7 +114,9 @@ function loadQueueFromLS(): IdbPlaylistState['queue'] | null {
     }
 }
 
-/** 同步读取 localStorage 里的小队列（≤ LS_QUEUE_LIMIT 项），供 store 首帧恢复（避免异步竞态） */
+/**
+ * 同步读取 localStorage 里的小队列（≤ LS_QUEUE_LIMIT 项），供 store 首帧恢复（避免异步竞态）
+ */
 export function idbLoadPlaylistQueueSync(): IdbPlaylistState['queue'] | null {
     return loadQueueFromLS();
 }
@@ -114,12 +125,13 @@ function saveQueueToLS(queue: IdbPlaylistState['queue']): void {
     try {
         localStorage.setItem(QUEUE_LS_KEY, JSON.stringify(queue));
     } catch {
-        /* 静默 */
+        // 静默
     }
 }
 
 function clearQueueFromLS(): void {
-    try { localStorage.removeItem(QUEUE_LS_KEY); } catch { /* */ }
+    try { localStorage.removeItem(QUEUE_LS_KEY); } catch { // ignore
+    }
 }
 
 // ---------- 队列：IndexedDB（大队列） ----------
@@ -148,7 +160,7 @@ async function saveQueueToIDB(state: IdbPlaylistState): Promise<void> {
             tx.onerror = () => reject(tx.error);
         });
     } catch {
-        /* 静默 */
+        // 静默
     }
 }
 
@@ -162,7 +174,7 @@ async function clearQueueFromIDB(): Promise<void> {
             tx.onerror = () => reject(tx.error);
         });
     } catch {
-        /* 静默 */
+        // 静默
     }
 }
 
@@ -191,7 +203,9 @@ export async function idbLoadPlaylist(): Promise<IdbPlaylistState | null> {
     return { queue: idb.queue, index: effectiveMeta.index, loopMode: effectiveMeta.loopMode, playOrder: effectiveMeta.playOrder };
 }
 
-/** 保存播放列表状态：元数据走 localStorage，队列按长度灵活选择存储；不可用时静默 */
+/**
+ * 保存播放列表状态：元数据走 localStorage，队列按长度灵活选择存储；不可用时静默
+ */
 export async function idbSavePlaylist(state: IdbPlaylistState): Promise<void> {
     // 元数据（小字段）总是走 localStorage
     saveMeta({ index: state.index, loopMode: state.loopMode, playOrder: state.playOrder });
@@ -206,7 +220,9 @@ export async function idbSavePlaylist(state: IdbPlaylistState): Promise<void> {
     }
 }
 
-/** 清空播放列表持久化数据 */
+/**
+ * 清空播放列表持久化数据
+ */
 export async function idbClearPlaylist(): Promise<void> {
     clearMeta();
     clearQueueFromLS();

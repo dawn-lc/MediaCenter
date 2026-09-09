@@ -13,7 +13,9 @@ import { apiLimiter, strictLimiter, streamLimiter, authLimiter } from './middlew
 import { serverEvents, PUSH_EVENTS, canSeeMedia, type MediaEventPayload } from './utils/serverEvents';
 import { prune, isObject, isString } from './utils/env';
 
-/** MulterError 的简化类型 */
+/**
+ * MulterError 的简化类型
+ */
 interface MulterErrorLike extends Error {
     code: string;
 }
@@ -34,9 +36,13 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 
-/** 日志中需脱敏的敏感查询参数（JWT token / 签名 sig 等） */
+/**
+ * 日志中需脱敏的敏感查询参数（JWT token / 签名 sig 等）
+ */
 const SENSITIVE_LOG_PARAMS = new Set(['token', 'sig']);
-/** 对请求 URL 脱敏：隐藏敏感查询参数值，避免 JWT/签名落入日志 */
+/**
+ * 对请求 URL 脱敏：隐藏敏感查询参数值，避免 JWT/签名落入日志
+ */
 function sanitizeLogUrl(originalUrl: string): string {
     try {
         const u = new URL(originalUrl, 'http://localhost');
@@ -179,7 +185,8 @@ app.post('/api/csp-report', (req: Request, res: Response) => {
     try {
         const report = (req.body as Record<string, unknown>)?.['csp-report'] ?? req.body;
         console.warn('[CSP] 违规上报:', JSON.stringify(report).slice(0, 500));
-    } catch { /* ignore */ }
+    } catch { // ignore
+    }
     res.status(204).end();
 });
 
@@ -224,7 +231,8 @@ app.get('/api/events', (req: Request, res: Response) => {
     const heartbeat = setInterval(() => {
         try {
             res.write(': ping\n\n');
-        } catch { /* 连接已断，由 close 事件清理 */ }
+        } catch { // 连接已断，由 close 事件清理
+        }
     }, 15_000);
 
     // 订阅推送事件（按连接用户过滤：仅推送可见且非自身触发的变更）
@@ -233,7 +241,8 @@ app.get('/api/events', (req: Request, res: Response) => {
             if (!shouldPushToUser(conn.user, event, payload)) return;
             try {
                 res.write(`event: ${event}\ndata: ${JSON.stringify(payload ?? null)}\n\n`);
-            } catch { /* ignore */ }
+            } catch { // ignore
+            }
         };
         serverEvents.on(event, fn);
         return [event, fn] as const;
@@ -306,7 +315,9 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 // 优雅关闭
-/** 所有活跃的服务器实例，供优雅关闭使用 */
+/**
+ * 所有活跃的服务器实例，供优雅关闭使用
+ */
 const activeServers: (http.Server | https.Server)[] = [];
 
 async function gracefulShutdown(signal: string) {
@@ -322,7 +333,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ── 启动服务器 ──
 
-/** 创建服务器实例并绑定到端口 */
+/**
+ * 创建服务器实例并绑定到端口
+ */
 function startServer(
     server: http.Server | https.Server,
     port: number,
@@ -341,7 +354,9 @@ function startServer(
     });
 }
 
-/** 初始化回调（数据库、上传目录等） */
+/**
+ * 初始化回调（数据库、上传目录等）
+ */
 async function onServerReady() {
     console.log('[Server] 正在初始化数据库...');
     ensureUploadDir();
@@ -360,7 +375,9 @@ if (config.sslEnabled) {
     console.log('[SSL] 证书:', config.sslCert);
     console.log('[SSL] 私钥:', config.sslKey);
 
-    /** 读取证书文件，失败时退出进程 */
+    /**
+     * 读取证书文件，失败时退出进程
+     */
     function loadSSLCredentials(): { cert: Buffer; key: Buffer } {
         try {
             console.log('[SSL] 正在读取证书...');
