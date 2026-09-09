@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Api } from '../../api';
 import type { Media } from '../../types';
@@ -53,6 +54,10 @@ export default function VideoPlayer({ media }: Props) {
         one: (event: string, cb: () => void) => void;
         play: () => Promise<any> | undefined;
     } | null>(null);
+    // video.js 播放器根元素（.video-js）：拖动进度浮层的 Portal 挂载点。
+    // 必须挂在这里——全屏时全屏的是该元素，浮层留在其外部（如 gesture-wrap）会被
+    // 全屏子树完全遮蔽（祖先不在全屏内，z-index 无解）
+    const playerElRef = useRef<HTMLElement | null>(null);
     // 最新 media 引用（video.js 初始化/事件闭包用，避免切歌后闭包过期）
     const mediaRef = useLatest(media);
     // 已换源的 media id（首帧由 <source> 提供，无需换源）
@@ -87,6 +92,8 @@ export default function VideoPlayer({ media }: Props) {
                 userActions: { hotkeys: true }
             });
             playerRef.current = player;
+            // 记录 player 根元素（拖动进度浮层 Portal 挂载点，保证全屏时可见）
+            playerElRef.current = player.el() as HTMLElement;
 
             player.ready(() => {
                 // 应用持久化的播放速度
@@ -99,10 +106,43 @@ export default function VideoPlayer({ media }: Props) {
                 player.muted(savedMuted);
 
                 // 视频全屏/退出时通知 PWAProvider 释放/恢复方向锁
+                // detail 携带视频内容方向（宽高比），供方向锁兜底决策（横视频→横屏/竖视频→竖屏）
                 player.on('fullscreenchange', () => {
+                    const el = videoRef.current;
+                    const vw = el?.videoWidth ?? 0;
+                    const vh = el?.videoHeight ?? 0;
+                    const isPortraitVideo = vw > 0 && vh > 0 && vh > vw;
                     const event = player.isFullscreen() ? 'vjs-fullscreen-enter' : 'vjs-fullscreen-exit';
-                    document.dispatchEvent(new CustomEvent(event));
+                    document.dispatchEvent(new CustomEvent(event, { detail: { portraitVideo: isPortraitVideo } }));
                 });
+
+                // 全屏控制栏"旋转屏幕"按钮：仅全屏时显示，点击派发 vjs-rotate 事件，
+                // 由 PWAProvider 执行 screen.orientation.lock(相反方向)（W3C 官方 rotate 范式）。
+                // 不依赖传感器：manifest 竖屏锁下 devicemotion 为空壳事件（实测），手动旋转
+                // 是全屏横竖切换的唯一可靠路径。
+                // 图标：元素挂 vjs-icon-repeat class，直接命中 vjs 字体图标全局定义
+                const ControlBar = player.getChild('controlBar');
+                if (ControlBar && !ControlBar.getChild('rotateButton')) {
+                    const BaseButton = videojs.getComponent('Button');
+                    if (BaseButton) {
+                        class RotateButton extends BaseButton {
+                            buildCSSClass() {
+                                return `vjs-rotate-button ${super.buildCSSClass()}`;
+                            }
+                            handleClick() {
+                                document.dispatchEvent(new CustomEvent('vjs-rotate'));
+                            }
+                            createEl() {
+                                const el = super.createEl();
+                                el.setAttribute('title', t('pwa.rotateScreen'));
+                                return el;
+                            }
+                        }
+                        videojs.registerComponent('RotateButton', RotateButton);
+                        // 插入到全屏按钮（controlBar 末尾倒数第一）之前
+                        ControlBar.addChild('RotateButton', {}, ControlBar.children().length - 1);
+                    }
+                }
 
                 async function refreshStream(): Promise<boolean> {
                     try {
@@ -305,6 +345,46 @@ export default function VideoPlayer({ media }: Props) {
         let lastTap = 0;
         let tapTimer: number | null = null;
 
+        // 拖动期间仅更新 vjs 控制栏进度条的显示（width + 当前时间文本），不调 currentTime——
+        // 拖动中视频已暂停 → 无 timeupdate → video.js 不会覆盖内联样式，时序安全；
+        // 松手真正 seek 后 timeupdate 触发，video.js 自动接管并覆写为准确值。
+        // 注意时间文本必须改 textNode 的 nodeValue（不能写 textContent）：TimeDisplay
+        // 内部持有 textNode_ 引用且要求它始终是 contentEl_ 的 firstChild，
+        // textContent 赋值会整体替换子节点 → 触发 "Prevented replacement of text node" 警告
+        const previewSeek = (t: number, dur: number) => {
+            const playerEl = playerElRef.current;
+            if (!playerEl || !isFinite(dur) || dur <= 0) return;
+            const pct = Math.min(Math.max((t / dur) * 100, 0), 100);
+            const playBar = playerEl.querySelector<HTMLElement>('.vjs-progress-control .vjs-play-progress');
+            if (playBar) {
+                playBar.style.width = `${pct}%`;
+                playBar.setAttribute('data-current-time', formatSeekTime(t));
+            }
+            const cur = playerEl.querySelector<HTMLElement>('.vjs-current-time-display .vjs-time-text, .vjs-current-time-display');
+            const textNode = cur?.firstChild;
+            if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                textNode.nodeValue = formatSeekTime(t); // 原地改值，节点结构不变
+            } else if (cur) {
+                cur.textContent = formatSeekTime(t); // 结构异常的兜底（video.js 会自愈重建）
+            }
+        };
+
+        // 拖动激活后，浏览器会在 pointerup 后派发合成 click，video.js 的
+        // handleTechClick_ 会把它当作一次点击切换播放状态：播放中拖动松手后被暂停、
+        // 暂停中被误播。捕获阶段拦截 pointerup 后的第一个 click（实测 target=vjs-tech，
+        // 到达间隔 <20ms，300ms 窗口富余）。
+        const suppressNextClick = () => {
+            const swallow = (e: MouseEvent) => {
+                videoEl.removeEventListener('click', swallow, true);
+                window.clearTimeout(suppressTimer);
+                e.preventDefault();
+                e.stopPropagation();
+            };
+            videoEl.addEventListener('click', swallow, true);
+            // 兜底移除：若无后续 click，窗口自动失效（拦到时提前清除）
+            const suppressTimer = window.setTimeout(() => videoEl.removeEventListener('click', swallow, true), 300);
+        };
+
         const onPointerDown = (e: PointerEvent) => {
             const target = e.target as HTMLElement | null;
             // 仅响应视频画面（排除控制栏/大播放按钮等 video.js 覆盖层）
@@ -331,12 +411,15 @@ export default function VideoPlayer({ media }: Props) {
             if (!dragState.active) {
                 if (Math.abs(dx) < VIDEO_DRAG_SEEK_THRESHOLD) return;
                 dragState.active = true;
-                // 拖动期间暂停定格，便于精确拖动；松手后按原状态恢复
+                // 拖动期间暂停定格，便于精确拖动；松手后按原状态恢复。
+                // （合成 click 的拦截在 pointerup 时布置——click 在 up 之后才派发，
+                //   激活时布置会在长拖动中过期失效，实测日志已证实）
                 if (dragState.wasPlaying) videoEl.pause();
             }
             const width = videoEl.clientWidth || 1;
             const newTime = Math.min(Math.max(dragState.startTime + (dx / width) * dur, 0), dur);
             dragState.lastTime = newTime;
+            previewSeek(newTime, dur); // 同步 vjs 进度条显示（不实际 seek）
             setSeekOverlay({ current: newTime, duration: dur });
         };
 
@@ -348,9 +431,10 @@ export default function VideoPlayer({ media }: Props) {
             }
 
             if (active) {
-                // 拖拽 seek 结束
+                // 拖拽 seek 结束：真实 seek + 拦截紧随其后的合成 click + 恢复原播放状态
                 videoEl.currentTime = lastTime;
                 setSeekOverlay(null);
+                suppressNextClick();
                 if (wasPlaying) videoEl.play().catch(() => { });
                 return;
             }
@@ -374,8 +458,24 @@ export default function VideoPlayer({ media }: Props) {
             }
         };
 
+        // 清除拖动预览对 vjs 进度条的内联样式篡改，恢复 video.js 自管显示
+        // （时间文本直接写回真实播放位置，同样走 nodeValue，见 previewSeek 注释）
+        const clearPreview = () => {
+            const playerEl = playerElRef.current;
+            if (!playerEl) return;
+            const playBar = playerEl.querySelector<HTMLElement>('.vjs-progress-control .vjs-play-progress');
+            playBar?.style.removeProperty('width');
+            playBar?.removeAttribute('data-current-time');
+            const cur = playerEl.querySelector<HTMLElement>('.vjs-current-time-display');
+            const textNode = cur?.firstChild;
+            if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                textNode.nodeValue = formatSeekTime(videoEl.currentTime || 0);
+            }
+        };
+
         const onPointerCancel = (e: PointerEvent) => {
             if (dragState && e.pointerId === dragState.pointerId) {
+                if (dragState.active) clearPreview(); // 已动过进度条显示才需要恢复
                 dragState = null;
                 setSeekOverlay(null);
             }
@@ -404,12 +504,15 @@ export default function VideoPlayer({ media }: Props) {
                 <video ref={videoRef} className="video-js vjs-default-skin vjs-big-play-centered" controls autoPlay={autoPlayVideo} preload="auto">
                     <source src={streamUrl} type={media.mimeType} />
                 </video>
-                {seekOverlay && (
+                {/* 拖动进度浮层：Portal 进 player 根元素（.video-js），全屏时该元素即全屏
+                    根，浮层随之进入全屏子树；非全屏时视觉位置不变（absolute 居中于播放器） */}
+                {seekOverlay && playerElRef.current && createPortal(
                     <div className="video-seek-overlay">
                         <span>{formatSeekTime(seekOverlay.current)}</span>
                         <span className="seek-divider">/</span>
                         <span>{formatSeekTime(seekOverlay.duration)}</span>
-                    </div>
+                    </div>,
+                    playerElRef.current
                 )}
             </div>
         </PlayerLayout>

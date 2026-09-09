@@ -544,3 +544,30 @@
 .player-wrapper .video-js *::after {
     box-sizing: content-box;
 }
+
+/* 全屏控制栏"旋转屏幕"按钮：仅移动端（触摸设备）全屏时显示。
+   桌面端显示器不参与 screen.orientation 旋转，锁定无意义；
+   用 (hover: none) + (pointer: coarse) 判定触摸/触屏设备 */
+.vjs-rotate-button {
+    display: none !important;
+    cursor: pointer;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .video-js.vjs-fullscreen .vjs-rotate-button {
+        display: block !important;
+    }
+}
+
+/* 图标沿用 vjs 字体图标体系：内置控件由 vjs CSS 同时提供 font-family 与 content
+   两条规则，自定义控件需补齐 font-family: VideoJS（否则 \f11a 在默认字体下显示为方框） */
+.vjs-rotate-button .vjs-icon-placeholder {
+    font-family: VideoJS;
+    font-weight: normal;
+    font-style: normal;
+}
+
+.vjs-rotate-button .vjs-icon-placeholder:before {
+    content: "\f11a";
+    /* vjs-icon-repeat：循环箭头 ≈ 旋转 */
+}

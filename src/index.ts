@@ -99,6 +99,15 @@ app.use(
     })
 );
 
+// 动作传感器（陀螺仪/重力加速度）策略：显式允许自家来源使用。
+// 播放页全屏时用 devicemotion 的重力向量驱动横竖屏自动旋转。
+// helmet 8 无 permissions-policy 中间件 → 手动设置；
+// 不设置时浏览器按默认策略（同源允许），显式声明是防御未来浏览器收紧默认值。
+app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Permissions-Policy', 'accelerometer=(self), gyroscope=(self)');
+    next();
+});
+
 // 中间件
 app.use(cors());
 

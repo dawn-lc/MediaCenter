@@ -419,7 +419,8 @@
         "noMedia": "该作者暂无媒体"
     },
     "pwa": {
-        "offlineBanner": "网络已断开，部分功能可能不可用"
+        "offlineBanner": "网络已断开，请等待网络链接恢复后再继续使用！",
+        "rotateScreen": "旋转屏幕"
     },
     "theme": {
         "label": "颜色主题",

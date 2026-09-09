@@ -288,7 +288,6 @@
             "title": "Users",
             "roleUpdated": "Role updated",
             "userDeleted": "User deleted",
-            "systemUserProtected": "System account cannot be modified",
             "userBanned": "User banned",
             "ban": "Ban",
             "unban": "Unban",
@@ -420,7 +419,8 @@
         "noMedia": "No media by this author"
     },
     "pwa": {
-        "offlineBanner": "Network disconnected, some features may be unavailable"
+        "offlineBanner": "Network disconnected. Please wait for the connection to be restored before continuing.",
+        "rotateScreen": "Rotate screen"
     },
     "theme": {
         "label": "Color theme",

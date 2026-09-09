@@ -21,6 +21,11 @@ export default defineConfig({
                 background_color: '#0f0f1a',
                 display: 'standalone',
                 display_override: ['window-controls-overlay', 'standalone'],
+                // 竖屏声明（系统级默认锁，非全屏 PWA 永远竖屏）。全屏期间由运行时
+                // screen.orientation.lock() 覆盖（优先级高于 manifest），配合播放器
+                // 控制栏的"旋转屏幕"按钮手动切换横竖屏（不依赖传感器）。
+                // ⚠️ 实测（2026-09）：此声明会使 Android PWA 的 devicemotion 变空壳事件
+                // （数据全 null），故方向控制必须用手动按钮而非重力驱动。
                 orientation: 'portrait',
                 start_url: '/',
                 scope: '/',
@@ -140,11 +145,20 @@ export default defineConfig({
         outDir: resolve(__dirname, '..', 'dist', 'public'),
         emptyOutDir: true,
         sourcemap: false,
+        // 警告阈值按 gzip 视角设定：500KB 原始字节经 gzip 后约 155KB（仍在正常范围），
+        // 600KB 阈值只对真正异常的 chunk 报警；VHS 剔除后已知最大 chunk 为 video.js 核心
+        chunkSizeWarningLimit: 600,
     },
     resolve: {
-        alias: {
-            '@': resolve(__dirname, 'src'),
-        },
+        alias: [
+            { find: '@', replacement: resolve(__dirname, 'src') },
+            // 用 video.js 官方 core 构建（dist/alt/video.core.js）替代默认入口：
+            // 默认 dist/video.es.js 物理捆绑 VHS（HLS/DASH 引擎，~400KB），本站只播
+            // 本地文件流用不到；core 构建无 VHS 且包含全部常用 API，chunk 703KB→约300KB。
+            // 正则 ^video\.js$ 只替换裸导入，不影响 video.js/dist/... 子路径（CSS 等）。
+            // 若未来需要播 m3u8/mpd 流，删除本条 alias 还原默认入口即可。
+            { find: /^video\.js$/, replacement: resolve(__dirname, 'node_modules/video.js/dist/alt/video.core.js') },
+        ],
     },
     server: {
         port: 5173,
